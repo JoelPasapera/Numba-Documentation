@@ -9,9 +9,8 @@ Puedes entrar a la página web con el siguiente link: https://joelpasapera.githu
 ## 📌 Descripción
 
 Esta es una guía técnica sobre el uso de **Numba** para optimización de rendimiento en Python.  
-Cubre desde los fundamentos del compilador JIT hasta extensiones y paralelismo explícito.
 
-El objetivo de este proyecto es documentar de manera estructurada y profunda todo lo necesario para utilizar Numba en entornos reales de alto rendimiento.
+El objetivo de este proyecto es documentar de manera estructurada todo lo necesario para utilizar Numba en entornos reales de alto rendimiento.
 
 ---
 
