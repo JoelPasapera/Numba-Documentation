@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guía Completa de Numba — De Principiante a Avanzado</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #d2a8ff;
+    --accent4: #f0883e;
+    --danger: #f85149;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.7; font-size: 16px;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Header */
+  .hero {
+    text-align: center; padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--border); margin-bottom: 2rem;
+  }
+  .hero h1 { font-size: 2.4rem; font-weight: 800; margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent3));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero .subtitle { color: var(--muted); font-size: 1.1rem; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 0.75rem; font-weight: 600; margin: 0.5rem 0.25rem;
+  }
+  .badge.green { background: rgba(63,185,80,0.15); color: var(--accent2); border: 1px solid rgba(63,185,80,0.3); }
+  .badge.blue { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+  .badge.purple { background: rgba(210,168,255,0.15); color: var(--accent3); border: 1px solid rgba(210,168,255,0.3); }
+  .badge.orange { background: rgba(240,136,62,0.15); color: var(--accent4); border: 1px solid rgba(240,136,62,0.3); }
+
+  /* Navigation */
+  .toc { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.5rem; margin-bottom: 2.5rem;
+  }
+  .toc h2 { font-size: 1.1rem; color: var(--accent); margin-bottom: 1rem; }
+  .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem 2rem; }
+  .toc a { color: var(--muted); text-decoration: none; font-size: 0.9rem; padding: 2px 0; display: block; }
+  .toc a:hover { color: var(--accent); }
+  .toc .module-label { font-size: 0.7rem; color: var(--accent3); text-transform: uppercase;
+    letter-spacing: 1px; margin-top: 0.7rem; margin-bottom: 0.2rem; }
+
+  /* Sections */
+  .module {
+    border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 2rem; overflow: hidden;
+  }
+  .module-header {
+    background: var(--surface); padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--border); cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .module-header:hover { background: #1c2129; }
+  .module-header h2 { font-size: 1.3rem; }
+  .module-header .num { color: var(--accent); margin-right: 0.75rem; font-weight: 800; }
+  .module-body { padding: 1.5rem; display: none; }
+  .module.open .module-body { display: block; }
+  .module-header .arrow { transition: transform 0.2s; color: var(--muted); font-size: 1.2rem; }
+  .module.open .module-header .arrow { transform: rotate(90deg); }
+
+  h3 { color: var(--accent2); font-size: 1.1rem; margin: 1.5rem 0 0.75rem;
+    padding-bottom: 0.3rem; border-bottom: 1px solid var(--border);
+  }
+  h4 { color: var(--accent3); font-size: 0.95rem; margin: 1.2rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+
+  /* Code blocks */
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem 1.2rem; overflow-x: auto;
+    margin: 0.75rem 0 1rem; font-size: 0.88rem; line-height: 1.6;
+  }
+  code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace; }
+  p code, li code {
+    background: rgba(88,166,255,0.1); padding: 2px 6px; border-radius: 4px;
+    font-size: 0.88em; color: var(--accent);
+  }
+
+  /* Syntax highlighting */
+  .kw { color: #ff7b72; }
+  .fn { color: #d2a8ff; }
+  .st { color: #a5d6ff; }
+  .cm { color: #8b949e; font-style: italic; }
+  .num { color: #79c0ff; }
+  .dec { color: #f0883e; }
+  .op { color: #ff7b72; }
+  .typ { color: #ffa657; }
+
+  /* Callouts */
+  .tip, .warn, .info, .perf {
+    border-radius: 8px; padding: 1rem 1.2rem; margin: 1rem 0;
+    border-left: 4px solid;
+  }
+  .tip { background: rgba(63,185,80,0.08); border-color: var(--accent2); }
+  .warn { background: rgba(248,81,73,0.08); border-color: var(--danger); }
+  .info { background: rgba(88,166,255,0.08); border-color: var(--accent); }
+  .perf { background: rgba(240,136,62,0.08); border-color: var(--accent4); }
+  .tip::before { content: "💡 Tip"; font-weight: 700; color: var(--accent2); display: block; margin-bottom: 0.3rem; }
+  .warn::before { content: "⚠️ Cuidado"; font-weight: 700; color: var(--danger); display: block; margin-bottom: 0.3rem; }
+  .info::before { content: "ℹ️ Info"; font-weight: 700; color: var(--accent); display: block; margin-bottom: 0.3rem; }
+  .perf::before { content: "⚡ Rendimiento"; font-weight: 700; color: var(--accent4); display: block; margin-bottom: 0.3rem; }
+
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+
+  /* Comparison tables */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+  th { background: var(--surface); color: var(--accent); text-align: left; padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border); font-weight: 600; }
+  td { padding: 0.5rem 0.8rem; border: 1px solid var(--border); }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+
+  .progress-map {
+    display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0;
+  }
+  .progress-step {
+    flex: 1; min-width: 120px; text-align: center; padding: 0.8rem 0.5rem;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+    font-size: 0.8rem;
+  }
+  .progress-step .step-num { font-size: 1.5rem; font-weight: 800; }
+  .progress-step.s1 .step-num { color: var(--accent2); }
+  .progress-step.s2 .step-num { color: var(--accent); }
+  .progress-step.s3 .step-num { color: var(--accent3); }
+  .progress-step.s4 .step-num { color: var(--accent4); }
+  .progress-step.s5 .step-num { color: var(--danger); }
+
+  @media(max-width:600px) {
+    .toc-grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 1.8rem; }
+    .progress-map { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="hero">
+  <h1>Guía Completa de Numba</h1>
+  <p class="subtitle">De principiante a profesional — con ejemplos prácticos</p>
+  <div>
+    <span class="badge green">CPU Optimization</span>
+    <span class="badge blue">Paralelismo</span>
+    <span class="badge purple">NumPy Integration</span>
+    <span class="badge orange">Extensiones</span>
+  </div>
+</div>
+
+<!-- Mapa de progreso -->
+<div class="progress-map">
+  <div class="progress-step s1"><div class="step-num">1</div>Fundamentos<br>@jit básico</div>
+  <div class="progress-step s2"><div class="step-num">2</div>Ufuncs<br>vectorize</div>
+  <div class="progress-step s3"><div class="step-num">3</div>Paralelismo<br>prange</div>
+  <div class="progress-step s4"><div class="step-num">4</div>Estructuras<br>jitclass</div>
+  <div class="progress-step s5"><div class="step-num">5</div>Extensiones<br>overload</div>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <h2>📚 Tabla de Contenidos</h2>
+  <div class="toc-grid">
+    <div>
+      <div class="module-label">Fundamentos</div>
+      <a href="#m1">1. ¿Qué es Numba y cómo funciona?</a>
+      <a href="#m2">2. @jit — Tu primer decorador</a>
+      <a href="#m3">3. Tipos y Signatures</a>
+      <div class="module-label">Intermedio</div>
+      <a href="#m4">4. @vectorize y @guvectorize</a>
+      <a href="#m5">5. Paralelismo con parallel y prange</a>
+    </div>
+    <div>
+      <div class="module-label">Avanzado</div>
+      <a href="#m6">6. @jitclass — Clases compiladas</a>
+      <a href="#m7">7. @stencil — Patrones de cálculo</a>
+      <a href="#m8">8. Performance Tips profesionales</a>
+      <div class="module-label">Experto</div>
+      <a href="#m9">9. Extendiendo Numba (@overload, @intrinsic)</a>
+      <a href="#m10">10. Cheatsheet y Patrones Comunes</a>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 1 ==================== -->
+<div class="module open" id="m1">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">01</span> ¿Qué es Numba y cómo funciona?</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+    <p>Numba es un compilador <strong>JIT (Just-In-Time)</strong> para Python que traduce funciones Python a código máquina nativo usando LLVM. Funciona mejor con código numérico que usa arrays NumPy y loops.</p>
+
+    <h3>¿Cómo funciona internamente?</h3>
+    <p>Cuando decoras una función con <code>@jit</code>, Numba hace lo siguiente:</p>
+    <ol>
+      <li><strong>Analiza el bytecode</strong> de Python de tu función</li>
+      <li><strong>Infiere los tipos</strong> de todas las variables (en la primera llamada)</li>
+      <li><strong>Genera LLVM IR</strong> (representación intermedia)</li>
+      <li><strong>Compila a código máquina</strong> nativo optimizado</li>
+      <li><strong>Cachea la función compilada</strong> para llamadas futuras con los mismos tipos</li>
+    </ol>
+
+    <h3>Instalación</h3>
+<pre><code><span class="cm"># Con conda (recomendado)</span>
+$ conda install numba
+
+<span class="cm"># Con pip</span>
+$ pip install numba
+
+<span class="cm"># Extras para máximo rendimiento</span>
+$ conda install intel-cmplr-lib-rt  <span class="cm"># Intel SVML para funciones matemáticas rápidas</span>
+$ pip install scipy                  <span class="cm"># Para numpy.linalg optimizado</span></code></pre>
+
+    <h3>El ejemplo más simple</h3>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> jit
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="dec">@jit</span>  <span class="cm"># Numba compila esto a código máquina</span>
+<span class="kw">def</span> <span class="fn">suma_cuadrados</span>(arr):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(arr)):
+        total += arr[i] ** <span class="num">2</span>
+    <span class="kw">return</span> total
+
+<span class="cm"># Primera llamada: compila + ejecuta (más lenta)</span>
+arr = np.arange(<span class="num">1_000_000</span>, dtype=np.float64)
+resultado = suma_cuadrados(arr)  <span class="cm"># ~compilación: 0.5s</span>
+
+<span class="cm"># Segunda llamada: solo ejecuta (rapidísima)</span>
+resultado = suma_cuadrados(arr)  <span class="cm"># ~ejecución: 0.002s vs ~0.5s en Python puro</span></code></pre>
+
+    <div class="info">
+      Numba genera <strong>especializaciones diferentes</strong> según los tipos de entrada. Si llamas a la misma función con <code>int64</code> y luego con <code>float64</code>, se compilan dos versiones distintas.
+    </div>
+
+    <h3>Modos de compilación</h3>
+    <table>
+      <tr><th>Modo</th><th>Descripción</th><th>Velocidad</th></tr>
+      <tr><td><strong>nopython</strong> (default)</td><td>Código 100% nativo, sin usar el intérprete Python</td><td>⚡⚡⚡ Máxima</td></tr>
+      <tr><td><strong>object mode</strong></td><td>Fallback que usa objetos Python (casi no acelera)</td><td>⚡ Mínima</td></tr>
+    </table>
+
+    <div class="warn">
+      Desde Numba 0.59, <code>@jit</code> es equivalente a <code>@jit(nopython=True)</code> y a <code>@njit</code>. El modo object ya no es el fallback por defecto. Si tu código no es compatible con nopython mode, Numba lanzará un error en lugar de compilar silenciosamente en object mode.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 2 ==================== -->
+<div class="module" id="m2">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">02</span> @jit — Tu primer decorador</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <h3>Compilación Lazy vs Eager</h3>
+    <h4>Lazy (recomendado para empezar)</h4>
+    <p>Numba infiere los tipos automáticamente en la primera llamada:</p>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> jit
+
+<span class="dec">@jit</span>
+<span class="kw">def</span> <span class="fn">f</span>(x, y):
+    <span class="kw">return</span> x + y
+
+f(<span class="num">1</span>, <span class="num">2</span>)       <span class="cm"># Compila versión int64</span>
+f(<span class="num">1j</span>, <span class="num">2</span>)      <span class="cm"># Compila OTRA versión para complex128</span>
+f(<span class="num">1.0</span>, <span class="num">2.0</span>)  <span class="cm"># Compila OTRA versión para float64</span></code></pre>
+
+    <h4>Eager (control total de tipos)</h4>
+    <p>Defines exactamente qué tipos acepta. Más rápido en la primera llamada (no hay inferencia):</p>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> jit, int32, float64
+
+<span class="dec">@jit</span>(int32(int32, int32))  <span class="cm"># retorno(arg1, arg2)</span>
+<span class="kw">def</span> <span class="fn">add_int</span>(x, y):
+    <span class="kw">return</span> x + y
+
+<span class="cm"># Múltiples signatures</span>
+<span class="dec">@jit</span>([int32(int32, int32),
+     float64(float64, float64)])
+<span class="kw">def</span> <span class="fn">add_multi</span>(x, y):
+    <span class="kw">return</span> x + y</code></pre>
+
+    <h3>Opciones clave del decorador</h3>
+
+    <h4><code>cache=True</code> — Evita recompilar</h4>
+<pre><code><span class="dec">@jit</span>(cache=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">heavy_computation</span>(x):
+    <span class="cm"># Se guarda en disco tras la primera compilación</span>
+    <span class="cm"># Las siguientes ejecuciones del script no recompilan</span>
+    <span class="kw">return</span> np.sum(np.sqrt(x))</code></pre>
+
+    <div class="warn">
+      Limitaciones del cache: no detecta cambios en funciones importadas de otros módulos, y las variables globales se tratan como constantes (el cache recuerda el valor al momento de compilar).
+    </div>
+
+    <h4><code>nogil=True</code> — Libera el GIL</h4>
+<pre><code><span class="dec">@jit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process_chunk</span>(data):
+    <span class="cm"># Se puede ejecutar concurrentemente con otros threads</span>
+    <span class="cm"># ¡Ideal para multithreading real en Python!</span>
+    result = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        result += data[i] ** <span class="num">2</span>
+    <span class="kw">return</span> result</code></pre>
+
+    <h4><code>fastmath=True</code> — Matemáticas más rápidas</h4>
+<pre><code><span class="cm"># Relaja IEEE 754 para mayor velocidad</span>
+<span class="dec">@jit</span>(fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">do_sum_fast</span>(A):
+    acc = <span class="num">0.</span>
+    <span class="kw">for</span> x <span class="kw">in</span> A:
+        acc += np.sqrt(x)
+    <span class="kw">return</span> acc  <span class="cm"># ~2x más rápido que sin fastmath</span>
+
+<span class="cm"># Control granular con flags LLVM específicas</span>
+<span class="dec">@jit</span>(fastmath={<span class="st">'reassoc'</span>, <span class="st">'nsz'</span>})  <span class="cm"># solo reasociación y no-signed-zero</span>
+<span class="kw">def</span> <span class="fn">add_assoc</span>(x, y):
+    <span class="kw">return</span> (x - y) + y</code></pre>
+
+    <h3>Llamando otras funciones compiladas</h3>
+<pre><code><span class="dec">@jit</span>
+<span class="kw">def</span> <span class="fn">square</span>(x):
+    <span class="kw">return</span> x ** <span class="num">2</span>
+
+<span class="dec">@jit</span>
+<span class="kw">def</span> <span class="fn">hypot</span>(x, y):
+    <span class="kw">return</span> math.sqrt(square(x) + square(y))  <span class="cm"># LLVM puede inlinear square()</span></code></pre>
+
+    <div class="tip">
+      <strong>Siempre</strong> decora con <code>@jit</code> las funciones auxiliares que llamas desde código Numba. Si no lo haces, Numba genera código mucho más lento al tener que "salir" al intérprete Python.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 3 ==================== -->
+<div class="module" id="m3">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">03</span> Tipos y Signatures</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+    <h3>Tipos escalares</h3>
+    <table>
+      <tr><th>Tipo Numba</th><th>Equivalente</th><th>Uso típico</th></tr>
+      <tr><td><code>int8, int16, int32, int64</code></td><td>Enteros con signo</td><td>Índices, contadores</td></tr>
+      <tr><td><code>uint8, uint16, uint32, uint64</code></td><td>Enteros sin signo</td><td>Datos binarios</td></tr>
+      <tr><td><code>float32, float64</code></td><td>Punto flotante</td><td>Cálculos numéricos</td></tr>
+      <tr><td><code>complex64, complex128</code></td><td>Complejos</td><td>Señales, FFT</td></tr>
+      <tr><td><code>boolean</code></td><td>Booleano</td><td>Flags</td></tr>
+      <tr><td><code>intp, uintp</code></td><td>Tamaño de puntero</td><td>Índices de arrays</td></tr>
+      <tr><td><code>void</code></td><td>None</td><td>Funciones sin retorno</td></tr>
+    </table>
+
+    <h3>Tipos de arrays</h3>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> float64, int32
+
+<span class="cm"># Indexas el tipo escalar para crear tipo de array</span>
+float64[:]       <span class="cm"># Array 1D de float64</span>
+int32[:, :]      <span class="cm"># Array 2D de int32</span>
+float64[:, :, :] <span class="cm"># Array 3D de float64</span>
+
+<span class="cm"># En signatures completas</span>
+<span class="dec">@jit</span>(float64[:](float64[:], float64[:]))
+<span class="kw">def</span> <span class="fn">add_arrays</span>(a, b):
+    <span class="kw">return</span> a + b
+
+<span class="cm"># Arrays C-contiguous vs Fortran-contiguous</span>
+<span class="kw">from</span> numba <span class="kw">import</span> types
+types.Array(types.float64, <span class="num">2</span>, <span class="st">'C'</span>)  <span class="cm"># 2D, C-order (row-major)</span>
+types.Array(types.float64, <span class="num">2</span>, <span class="st">'F'</span>)  <span class="cm"># 2D, Fortran-order (column-major)</span>
+types.Array(types.float64, <span class="num">2</span>, <span class="st">'A'</span>)  <span class="cm"># 2D, cualquier layout</span></code></pre>
+
+    <h3>Contenedores tipados</h3>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> types
+<span class="kw">from</span> numba.typed <span class="kw">import</span> Dict, List
+
+<span class="cm"># Listas tipadas (se pueden usar en @jit)</span>
+<span class="dec">@jit</span>
+<span class="kw">def</span> <span class="fn">usar_lista</span>():
+    lst = List()
+    lst.append(<span class="num">1</span>)
+    lst.append(<span class="num">2</span>)
+    lst.append(<span class="num">3</span>)
+    <span class="kw">return</span> lst
+
+<span class="cm"># Diccionarios tipados</span>
+<span class="dec">@jit</span>
+<span class="kw">def</span> <span class="fn">usar_dict</span>():
+    d = Dict()
+    d[<span class="num">1</span>] = <span class="num">10.0</span>
+    d[<span class="num">2</span>] = <span class="num">20.0</span>
+    <span class="kw">return</span> d
+
+<span class="cm"># Tipos explícitos</span>
+types.DictType(types.int64, types.float64)
+types.ListType(types.float64)</code></pre>
+
+    <div class="info">
+      Las listas y diccionarios de Python estándar <strong>no funcionan</strong> en nopython mode. Debes usar <code>numba.typed.List</code> y <code>numba.typed.Dict</code>.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 4 ==================== -->
+<div class="module" id="m4">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">04</span> @vectorize y @guvectorize — Ufuncs a medida</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <h3>@vectorize — Ufuncs elemento a elemento</h3>
+    <p>Escribes la operación escalar y Numba genera el loop automáticamente, con todas las features de un ufunc NumPy (broadcasting, reduce, accumulate).</p>
+
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> vectorize, float64, int64
+
+<span class="cm"># Eager: defines los tipos explícitamente</span>
+<span class="dec">@vectorize</span>([float64(float64, float64)])
+<span class="kw">def</span> <span class="fn">clip_value</span>(x, threshold):
+    <span class="kw">if</span> x > threshold:
+        <span class="kw">return</span> threshold
+    <span class="kw">elif</span> x < -threshold:
+        <span class="kw">return</span> -threshold
+    <span class="kw">return</span> x
+
+<span class="cm"># Ahora funciona como cualquier ufunc de NumPy</span>
+arr = np.random.randn(<span class="num">1000</span>)
+result = clip_value(arr, <span class="num">1.5</span>)  <span class="cm"># Broadcasting automático</span>
+
+<span class="cm"># ¡También reduce y accumulate!</span>
+<span class="dec">@vectorize</span>([float64(float64, float64)])
+<span class="kw">def</span> <span class="fn">add</span>(x, y):
+    <span class="kw">return</span> x + y
+
+a = np.arange(<span class="num">12</span>).reshape(<span class="num">3</span>, <span class="num">4</span>)
+add.reduce(a, axis=<span class="num">0</span>)       <span class="cm"># Suma por columnas</span>
+add.accumulate(a, axis=<span class="num">1</span>)   <span class="cm"># Suma acumulada por filas</span></code></pre>
+
+    <h3>Targets: CPU, Parallel, CUDA</h3>
+    <table>
+      <tr><th>Target</th><th>Cuándo usar</th><th>Overhead</th></tr>
+      <tr><td><code>target='cpu'</code></td><td>Datos pequeños (&lt; 1KB), baja intensidad</td><td>Mínimo</td></tr>
+      <tr><td><code>target='parallel'</code></td><td>Datos medianos (&lt; 1MB)</td><td>Bajo (threading)</td></tr>
+      <tr><td><code>target='cuda'</code></td><td>Datos grandes (&gt; 1MB), alta intensidad</td><td>Alto (transferencia GPU)</td></tr>
+    </table>
+
+<pre><code><span class="cm"># Paralelizado automáticamente en todos los cores</span>
+<span class="dec">@vectorize</span>([float64(float64, float64)], target=<span class="st">'parallel'</span>)
+<span class="kw">def</span> <span class="fn">add_parallel</span>(x, y):
+    <span class="kw">return</span> x + y</code></pre>
+
+    <h3>@guvectorize — Operaciones sobre sub-arrays</h3>
+    <p>Cuando necesitas operar sobre <strong>porciones de arrays</strong>, no solo escalares. Defines un layout simbólico que indica las dimensiones de entrada/salida.</p>
+
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> guvectorize, float64
+
+<span class="cm"># Media móvil: recibe array 1D, devuelve escalar por cada "fila"</span>
+<span class="dec">@guvectorize</span>([(float64[:], float64[:])], <span class="st">'(n)->()'</span>)
+<span class="kw">def</span> <span class="fn">moving_mean</span>(arr, result):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(arr.shape[<span class="num">0</span>]):
+        total += arr[i]
+    result[<span class="num">0</span>] = total / arr.shape[<span class="num">0</span>]
+
+<span class="cm"># Aplicar sobre una matriz (cada fila es un vector)</span>
+data = np.random.rand(<span class="num">100</span>, <span class="num">10</span>)
+means = moving_mean(data)  <span class="cm"># → array de 100 medias (broadcasting automático)</span>
+
+<span class="cm"># Ejemplo más completo: suma con peso</span>
+<span class="dec">@guvectorize</span>(
+    [(float64[:], float64[:], float64[:])],
+    <span class="st">'(n),(n)->(n)'</span>  <span class="cm"># dos arrays entrada → un array salida, misma forma</span>
+)
+<span class="kw">def</span> <span class="fn">weighted_add</span>(a, weights, result):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(a.shape[<span class="num">0</span>]):
+        result[i] = a[i] * weights[i]</code></pre>
+
+    <div class="tip">
+      En <code>@guvectorize</code> los resultados se escriben en el argumento de salida (<code>result</code>), no se retornan. NumPy aloca el array de salida automáticamente.
+    </div>
+
+    <h4>Notación de layouts</h4>
+    <table>
+      <tr><th>Layout</th><th>Significado</th></tr>
+      <tr><td><code>(n),()->(n)</code></td><td>Array + escalar → array</td></tr>
+      <tr><td><code>(n)->()</code></td><td>Array → escalar (reducción)</td></tr>
+      <tr><td><code>(m,n),(n)->(m)</code></td><td>Matriz × vector → vector</td></tr>
+      <tr><td><code>(n),(n)->(n)</code></td><td>Dos arrays → array elemento a elemento</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 5 ==================== -->
+<div class="module" id="m5">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">05</span> Paralelismo con parallel y prange</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <h3>Auto-paralelización de operaciones</h3>
+    <p>Con <code>parallel=True</code>, Numba identifica operaciones con semántica paralela y las fusiona en kernels que se ejecutan en múltiples threads.</p>
+
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> njit
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">ident_parallel</span>(x):
+    <span class="kw">return</span> np.cos(x) ** <span class="num">2</span> + np.sin(x) ** <span class="num">2</span>
+
+<span class="cm"># ~5x más rápido que NumPy puro</span>
+<span class="cm"># ~6x más rápido que @njit sin parallel</span></code></pre>
+
+    <h3>Operaciones auto-paralelizables</h3>
+    <ul>
+      <li>Operaciones aritméticas entre arrays y escalares (<code>+ - * / ** %</code>)</li>
+      <li>Operadores de comparación (<code>== != < <= > >=</code>)</li>
+      <li>Ufuncs de NumPy soportados en nopython mode</li>
+      <li>Reducciones: <code>sum, prod, min, max, argmin, argmax, mean, var, std</code></li>
+      <li>Creación de arrays: <code>zeros, ones, arange, linspace</code></li>
+      <li><code>numpy.dot</code> (matrix × vector, vector × vector)</li>
+      <li>Funciones random (<code>rand, randn, normal, uniform</code>, etc.)</li>
+    </ul>
+
+    <h3>prange — Loops paralelos explícitos</h3>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> njit, prange
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="cm"># Reducción paralela simple</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">parallel_sum</span>(A):
+    s = <span class="num">0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(A.shape[<span class="num">0</span>]):  <span class="cm"># cada iteración en un thread distinto</span>
+        s += A[i]
+    <span class="kw">return</span> s
+
+<span class="cm"># Reducción sobre array 2D</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">parallel_product_2d</span>(n):
+    shp = (<span class="num">13</span>, <span class="num">17</span>)
+    result = <span class="num">2</span> * np.ones(shp, np.int_)
+    tmp = <span class="num">2</span> * np.ones_like(result)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n):
+        result *= tmp
+    <span class="kw">return</span> result</code></pre>
+
+    <div class="perf">
+      Las reducciones soportadas por prange son: <code>+=, +, -=, -, *=, *, /=, /, max(), min()</code>. El operador <code>//=</code> NO está soportado (depende del orden de aplicación).
+    </div>
+
+    <h3>Ejemplo real: Regresión Logística paralela</h3>
+<pre><code><span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">logistic_regression</span>(Y, X, w, iterations):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(iterations):
+        w -= np.dot(
+            ((<span class="num">1.0</span> / (<span class="num">1.0</span> + np.exp(-Y * np.dot(X, w))) - <span class="num">1.0</span>) * Y), X
+        )
+    <span class="kw">return</span> w
+
+<span class="cm"># Numba fusiona automáticamente las operaciones element-wise</span>
+<span class="cm"># en un solo kernel paralelo. ¡Sin cambiar el código!</span></code></pre>
+
+    <h3>⚠️ Race Conditions — Errores comunes</h3>
+<pre><code><span class="cm"># ❌ INCORRECTO: race condition en slices</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">prange_wrong</span>(x):
+    y = np.zeros(<span class="num">4</span>)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(x.shape[<span class="num">0</span>]):
+        y[:] += x[i]  <span class="cm"># ¡Múltiples threads escriben en y al mismo tiempo!</span>
+    <span class="kw">return</span> y
+
+<span class="cm"># ✅ CORRECTO: reducción sobre array completo</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">prange_correct</span>(x):
+    y = np.zeros(<span class="num">4</span>)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(x.shape[<span class="num">0</span>]):
+        y += x[i]  <span class="cm"># Numba detecta la reducción correctamente</span>
+    <span class="kw">return</span> y</code></pre>
+
+    <div class="warn">
+      Mutar listas/sets/dicts dentro de un <code>prange</code> <strong>NO es thread-safe</strong>. Nunca hagas <code>z.append(i)</code> dentro de un loop paralelo — causará corrupción de memoria.
+    </div>
+
+    <h3>Diagnósticos de paralelismo</h3>
+<pre><code><span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">test</span>(x):
+    n = x.shape[<span class="num">0</span>]
+    a = np.sin(x)
+    b = np.cos(a * a)
+    acc = <span class="num">0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n - <span class="num">2</span>):
+        <span class="kw">for</span> j <span class="kw">in</span> prange(n - <span class="num">1</span>):
+            acc += b[i] + b[j + <span class="num">1</span>]
+    <span class="kw">return</span> acc
+
+test(np.arange(<span class="num">10</span>))
+test.parallel_diagnostics(level=<span class="num">4</span>)  <span class="cm"># Imprime qué se paralelizó y qué no</span></code></pre>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 6 ==================== -->
+<div class="module" id="m6">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">06</span> @jitclass — Clases compiladas</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+    <p>Permite definir clases cuyos métodos se compilan a código nativo y cuya data se almacena como estructura C (sin overhead del intérprete).</p>
+
+    <h3>Uso básico con spec explícita</h3>
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> int32, float32
+<span class="kw">from</span> numba.experimental <span class="kw">import</span> jitclass
+
+spec = [
+    (<span class="st">'value'</span>, int32),
+    (<span class="st">'array'</span>, float32[:]),
+]
+
+<span class="dec">@jitclass</span>(spec)
+<span class="kw">class</span> <span class="fn">Bag</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, value):
+        self.value = value
+        self.array = np.zeros(value, dtype=np.float32)
+
+    <span class="dec">@property</span>
+    <span class="kw">def</span> <span class="fn">size</span>(self):
+        <span class="kw">return</span> self.array.size
+
+    <span class="kw">def</span> <span class="fn">increment</span>(self, val):
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(self.size):
+            self.array[i] += val
+        <span class="kw">return</span> self.array
+
+    <span class="dec">@staticmethod</span>
+    <span class="kw">def</span> <span class="fn">add</span>(x, y):
+        <span class="kw">return</span> x + y
+
+mybag = Bag(<span class="num">21</span>)
+mybag.increment(<span class="num">5.0</span>)</code></pre>
+
+    <h3>Con type annotations (más moderno)</h3>
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> List
+<span class="kw">from</span> numba.experimental <span class="kw">import</span> jitclass
+<span class="kw">from</span> numba.typed <span class="kw">import</span> List <span class="kw">as</span> NumbaList
+
+<span class="dec">@jitclass</span>
+<span class="kw">class</span> <span class="fn">Counter</span>:
+    value: int
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        self.value = <span class="num">0</span>
+
+    <span class="kw">def</span> <span class="fn">get</span>(self) -> int:
+        ret = self.value
+        self.value += <span class="num">1</span>
+        <span class="kw">return</span> ret
+
+<span class="dec">@jitclass</span>
+<span class="kw">class</span> <span class="fn">ListLoopIterator</span>:
+    counter: Counter
+    items: List[float]
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, items: List[float]):
+        self.items = items
+        self.counter = Counter()</code></pre>
+
+    <h3>Contenedores tipados como campos</h3>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> types, typed
+<span class="kw">from</span> numba.experimental <span class="kw">import</span> jitclass
+
+kv_ty = (types.int64, types.unicode_type)
+
+<span class="dec">@jitclass</span>([
+    (<span class="st">'d'</span>, types.DictType(*kv_ty)),
+    (<span class="st">'l'</span>, types.ListType(types.float64))
+])
+<span class="kw">class</span> <span class="fn">ContainerHolder</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        self.d = typed.Dict.empty(*kv_ty)
+        self.l = typed.List.empty_list(types.float64)
+
+c = ContainerHolder()
+c.d[<span class="num">1</span>] = <span class="st">"apple"</span>
+c.l.append(<span class="num">123.</span>)</code></pre>
+
+    <div class="warn">
+      Los campos de contenedores (<code>Dict</code>, <code>List</code>) <strong>deben inicializarse explícitamente</strong> en <code>__init__</code>. Escribir en un contenedor no inicializado causa <strong>segfault</strong>.
+    </div>
+
+    <h3>Dunder methods soportados</h3>
+    <p>jitclass soporta una amplia gama de métodos especiales: <code>__abs__, __bool__, __getitem__, __setitem__, __len__, __hash__, __eq__, __ne__, __lt__, __le__, __gt__, __ge__, __add__, __mul__, __sub__, __truediv__, __floordiv__, __mod__, __pow__, __neg__, __pos__</code>, y todos sus variantes <code>__i*__</code> (in-place) y <code>__r*__</code> (reflected).</p>
+
+    <div class="info">
+      <strong>Limitación actual:</strong> jitclass solo funciona en CPU. Soporte para GPU está planeado para versiones futuras.
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 7 ==================== -->
+<div class="module" id="m7">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">07</span> @stencil — Patrones de cálculo sobre vecinos</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+    <p>Los stencils son patrones donde cada elemento del array resultado depende de un "vecindario" de elementos del array de entrada. Piensa en filtros de imagen, simulaciones de calor, autómatas celulares, etc.</p>
+
+    <h3>Uso básico</h3>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> stencil
+
+<span class="cm"># Promedio de 4 vecinos (tipo Laplaciano discreto)</span>
+<span class="dec">@stencil</span>
+<span class="kw">def</span> <span class="fn">kernel_laplacian</span>(a):
+    <span class="kw">return</span> <span class="num">0.25</span> * (a[<span class="num">0</span>, <span class="num">1</span>] + a[<span class="num">1</span>, <span class="num">0</span>] + a[<span class="num">0</span>, <span class="num">-1</span>] + a[<span class="num">-1</span>, <span class="num">0</span>])
+
+<span class="cm"># Los índices son RELATIVOS al punto actual</span>
+<span class="cm"># a[0, 0] = elemento actual, a[-1, 0] = arriba, etc.</span>
+
+input_arr = np.arange(<span class="num">100</span>).reshape((<span class="num">10</span>, <span class="num">10</span>)).astype(np.float64)
+output = kernel_laplacian(input_arr)
+<span class="cm"># Los bordes se ponen a 0 por defecto</span></code></pre>
+
+    <h3>Media móvil con neighborhood</h3>
+<pre><code><span class="cm"># Media móvil de 30 días (sin escribir 30 términos)</span>
+<span class="dec">@stencil</span>(neighborhood=((<span class="num">-29</span>, <span class="num">0</span>),))
+<span class="kw">def</span> <span class="fn">moving_average_30d</span>(a):
+    cumul = <span class="num">0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="num">-29</span>, <span class="num">1</span>):
+        cumul += a[i]
+    <span class="kw">return</span> cumul / <span class="num">30</span></code></pre>
+
+    <h3>Opciones de stencil</h3>
+    <table>
+      <tr><th>Opción</th><th>Descripción</th></tr>
+      <tr><td><code>cval=X</code></td><td>Valor para los bordes (default: 0)</td></tr>
+      <tr><td><code>neighborhood=((min,max),...)</code></td><td>Define el rango de vecinos explícitamente</td></tr>
+      <tr><td><code>standard_indexing=("b",)</code></td><td>Arrays auxiliares con indexación normal (no relativa)</td></tr>
+    </table>
+
+    <h3>Stencil + parallel (máxima velocidad)</h3>
+<pre><code><span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">apply_blur</span>(image):
+    <span class="cm"># El stencil se paraleliza automáticamente con parallel=True</span>
+    <span class="kw">return</span> stencil(
+        <span class="kw">lambda</span> a: <span class="num">0.2</span> * (a[<span class="num">-1</span>,<span class="num">0</span>] + a[<span class="num">1</span>,<span class="num">0</span>] + a[<span class="num">0</span>,<span class="num">-1</span>] + a[<span class="num">0</span>,<span class="num">1</span>] + a[<span class="num">0</span>,<span class="num">0</span>])
+    )(image)</code></pre>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 8 ==================== -->
+<div class="module" id="m8">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">08</span> Performance Tips — Nivel profesional</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <h3>Tabla de rendimiento real (Intel i7, 10M elementos)</h3>
+    <table>
+      <tr><th>Configuración</th><th>SVML</th><th>Tiempo</th><th>Speedup vs NumPy</th></tr>
+      <tr><td>NumPy puro</td><td>—</td><td>5.84s</td><td>1x</td></tr>
+      <tr><td><code>@njit</code></td><td>No</td><td>5.95s</td><td>~1x</td></tr>
+      <tr><td><code>@njit</code></td><td>Sí</td><td>2.26s</td><td>2.6x</td></tr>
+      <tr><td><code>@njit(fastmath=True)</code></td><td>Sí</td><td>1.8s</td><td>3.2x</td></tr>
+      <tr><td><code>@njit(parallel=True)</code></td><td>Sí</td><td>0.624s</td><td>9.4x</td></tr>
+      <tr><td><code>@njit(parallel=True, fastmath=True)</code></td><td>Sí</td><td>0.576s</td><td><strong>10x</strong></td></tr>
+    </table>
+
+    <h3>1. Instala Intel SVML</h3>
+<pre><code>$ conda install intel-cmplr-lib-rt
+<span class="cm"># Numba lo detecta automáticamente</span>
+<span class="cm"># Acelera funciones trascendentales (sin, cos, exp, log...)</span></code></pre>
+
+    <h3>2. Loops > Vectorización NumPy (en Numba)</h3>
+<pre><code><span class="cm"># Ambos son IGUAL de rápidos con @njit</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">vectorized_style</span>(x):
+    <span class="kw">return</span> np.cos(x) ** <span class="num">2</span> + np.sin(x) ** <span class="num">2</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">loop_style</span>(x):
+    r = np.empty_like(x)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(x)):
+        r[i] = np.cos(x[i]) ** <span class="num">2</span> + np.sin(x[i]) ** <span class="num">2</span>
+    <span class="kw">return</span> r
+
+<span class="cm"># ¡Escribe loops sin miedo! LLVM optimiza igual que C</span></code></pre>
+
+    <div class="perf">
+      En Numba, los loops son <strong>tan rápidos como el código vectorizado</strong>, a diferencia de Python puro. Esto da más flexibilidad y a menudo mejor uso de memoria (no creas arrays temporales).
+    </div>
+
+    <h3>3. Combinación máxima</h3>
+<pre><code><span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>, cache=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">max_performance_sum</span>(A):
+    n = <span class="fn">len</span>(A)
+    acc = <span class="num">0.</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n):  <span class="cm"># paralelo + fastmath = máxima velocidad</span>
+        acc += np.sqrt(A[i])
+    <span class="kw">return</span> acc
+<span class="cm"># Resultado: ~5.37ms vs 35.2ms sin parallel/fastmath (6.5x)</span></code></pre>
+
+    <h3>4. Álgebra lineal optimizada</h3>
+<pre><code><span class="cm"># Asegúrate de tener SciPy (para LAPACK/BLAS)</span>
+<span class="cm"># Con Anaconda, SciPy usa Intel MKL automáticamente</span>
+$ pip install scipy
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">solve_system</span>(A, b):
+    <span class="kw">return</span> np.linalg.solve(A, b)  <span class="cm"># Usa MKL internamente</span></code></pre>
+
+    <h3>5. Evita object mode a toda costa</h3>
+    <div class="warn">
+      Si Numba no puede compilar algo en nopython mode, lanzará un error. Las causas más comunes son: usar listas Python normales, llamar funciones no soportadas, o usar tipos de datos no soportados. Revisa los diagnósticos de compilación con <code>NUMBA_DEVELOPER_MODE=1</code>.
+    </div>
+
+    <h3>6. Memory layout matters</h3>
+<pre><code><span class="cm"># C-contiguous (row-major) vs Fortran-contiguous (column-major)</span>
+<span class="cm"># Acceder a memoria de forma contigua es MUCHO más rápido</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">row_sum_fast</span>(matrix):   <span class="cm"># ✅ Acceso por filas en C-order</span>
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">0</span>]):
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):
+            total += matrix[i, j]
+    <span class="kw">return</span> total
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">col_sum_slow</span>(matrix):   <span class="cm"># ❌ Acceso por columnas en C-order (cache misses)</span>
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">0</span>]):
+            total += matrix[i, j]
+    <span class="kw">return</span> total</code></pre>
+  </div>
+</div>
+
+<!-- ==================== MÓDULO 9 ==================== -->
+<div class="module" id="m9">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">09</span> Extendiendo Numba — @overload e @intrinsic</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+    <p>El sistema de extensiones de Numba permite añadir soporte para funciones, métodos y tipos personalizados en nopython mode.</p>
+
+    <h3>@overload — Implementar funciones existentes</h3>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> types
+<span class="kw">from</span> numba.extending <span class="kw">import</span> overload
+
+<span class="cm"># Supongamos que quieres que len() funcione con tuplas en Numba</span>
+<span class="dec">@overload</span>(len)
+<span class="kw">def</span> <span class="fn">tuple_len</span>(seq):
+    <span class="kw">if</span> <span class="fn">isinstance</span>(seq, types.BaseTuple):
+        n = <span class="fn">len</span>(seq)  <span class="cm"># esto se ejecuta en compile time</span>
+        <span class="kw">def</span> <span class="fn">len_impl</span>(seq):
+            <span class="kw">return</span> n   <span class="cm"># esto se ejecuta en runtime</span>
+        <span class="kw">return</span> len_impl
+    <span class="cm"># Si no retorna nada, Numba prueba otras implementaciones</span></code></pre>
+
+    <h3>@overload_method — Añadir métodos a tipos</h3>
+<pre><code><span class="kw">from</span> numba.extending <span class="kw">import</span> overload_method
+
+<span class="dec">@overload_method</span>(types.Array, <span class="st">'take'</span>)
+<span class="kw">def</span> <span class="fn">array_take</span>(arr, indices):
+    <span class="kw">if</span> <span class="fn">isinstance</span>(indices, types.Array):
+        <span class="kw">def</span> <span class="fn">take_impl</span>(arr, indices):
+            n = indices.shape[<span class="num">0</span>]
+            res = np.empty(n, arr.dtype)
+            <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+                res[i] = arr[indices[i]]
+            <span class="kw">return</span> res
+        <span class="kw">return</span> take_impl</code></pre>
+
+    <h3>@overload_attribute — Propiedades personalizadas</h3>
+<pre><code><span class="kw">from</span> numba.extending <span class="kw">import</span> overload_attribute
+
+<span class="dec">@overload_attribute</span>(types.Array, <span class="st">'nbytes'</span>)
+<span class="kw">def</span> <span class="fn">array_nbytes</span>(arr):
+    <span class="kw">def</span> <span class="fn">get</span>(arr):
+        <span class="kw">return</span> arr.size * arr.itemsize
+    <span class="kw">return</span> get</code></pre>
+
+    <h3>@intrinsic — Escape hatch a LLVM IR</h3>
+    <p>Para expertos: genera código LLVM IR directamente. Se inlinea en el caller.</p>
+<pre><code><span class="kw">from</span> numba.extending <span class="kw">import</span> intrinsic
+
+<span class="dec">@intrinsic</span>
+<span class="kw">def</span> <span class="fn">cast_int_to_byte_ptr</span>(typingctx, src):
+    <span class="kw">if</span> <span class="fn">isinstance</span>(src, types.Integer):
+        result_type = types.CPointer(types.uint8)
+        sig = result_type(types.uintp)
+        <span class="kw">def</span> <span class="fn">codegen</span>(context, builder, signature, args):
+            [src] = args
+            rtype = signature.return_type
+            llrtype = context.get_value_type(rtype)
+            <span class="kw">return</span> builder.inttoptr(src, llrtype)
+        <span class="kw">return</span> sig, codegen</code></pre>
+
+    <h3>Importar funciones Cython</h3>
+<pre><code><span class="kw">import</span> ctypes
+<span class="kw">from</span> numba.extending <span class="kw">import</span> get_cython_function_address
+
+<span class="cm"># Obtener dirección de función C definida en un módulo Cython</span>
+addr = get_cython_function_address(<span class="st">"foo"</span>, <span class="st">"myexp"</span>)
+functype = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)
+myexp = functype(addr)
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">double_myexp</span>(x):
+    <span class="kw">return</span> <span class="num">2</span> * myexp(x)  <span class="cm"># ¡Llama a la función C dentro de Numba!</span></code></pre>
+
+    <h3>StructRef — Estructuras mutables por referencia</h3>
+<pre><code><span class="kw">from</span> numba.core <span class="kw">import</span> types
+<span class="kw">from</span> numba.experimental <span class="kw">import</span> structref
+
+<span class="dec">@structref.register</span>
+<span class="kw">class</span> <span class="fn">MyStructType</span>(types.StructRef):
+    <span class="kw">def</span> <span class="fn">preprocess_fields</span>(self, fields):
+        <span class="kw">return</span> <span class="fn">tuple</span>(
+            (name, types.unliteral(typ)) <span class="kw">for</span> name, typ <span class="kw">in</span> fields
+        )
+
+<span class="cm"># Proxy Python para interactuar desde el intérprete</span>
+<span class="kw">class</span> <span class="fn">MyStruct</span>(structref.StructRefProxy):
+    <span class="kw">def</span> <span class="fn">__new__</span>(cls, name, vector):
+        <span class="kw">return</span> structref.StructRefProxy.__new__(cls, name, vector)
+
+<span class="cm"># Se pueden definir propiedades que delegan a funciones JIT</span></code></pre>
+  </div>
+</div>
+
+
+
+        
+<!--
+  ============================================================
+  MÓDULO EXTRA: Guía Exhaustiva de Decoradores
+  ============================================================
+  INSTRUCCIONES: Copia todo este bloque y pégalo en tu guía
+  JUSTO ANTES de la línea:
+      <!-- ==================== MÓDULO 10 ==================== -->
+  
+  También necesitas actualizar el TOC. En la sección <div class="toc">,
+  dentro del segundo <div> del toc-grid, añade esta línea antes de
+  "10. Cheatsheet y Patrones Comunes":
+  
+      <a href="#m-decorators">★ Guía Exhaustiva: ¿Qué decorador uso?</a>
+  ============================================================
+-->
+
+<!-- ==================== MÓDULO DECORADORES ==================== -->
+<div class="module" id="m-decorators">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">★</span> Guía Exhaustiva: ¿Qué decorador uso y cuándo?</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <p>Esta sección resuelve la pregunta más importante al usar Numba: <strong>¿qué decorador necesito para MI caso?</strong> Cada decorador existe para resolver un problema distinto. Usar el incorrecto no solo no ayuda — puede hacer tu código más lento, incorrecto, o directamente roto.</p>
+
+    <!-- ============ MAPA DE DECISIÓN ============ -->
+    <h3>🗺️ Mapa de decisión rápido</h3>
+    <p>Antes de leer todo, usa esta guía rápida:</p>
+    <table>
+      <tr><th>Tu situación</th><th>Decorador correcto</th></tr>
+      <tr><td>Tengo una función con loops numéricos y quiero que vaya rápido</td><td><code>@njit</code></td></tr>
+      <tr><td>Tengo una operación escalar que quiero aplicar a todo un array</td><td><code>@vectorize</code></td></tr>
+      <tr><td>Tengo una operación que recibe/devuelve sub-arrays (no escalares)</td><td><code>@guvectorize</code></td></tr>
+      <tr><td>Tengo un cálculo donde cada elemento depende de sus vecinos</td><td><code>@stencil</code></td></tr>
+      <tr><td>Necesito una clase con estado y métodos rápidos</td><td><code>@jitclass</code></td></tr>
+      <tr><td>Necesito que una función Python sea llamable desde C/Fortran</td><td><code>@cfunc</code></td></tr>
+      <tr><td>Quiero que una función de terceros funcione dentro de @njit</td><td><code>@overload</code></td></tr>
+    </table>
+
+    <!-- ============================================ -->
+    <!-- ============ @njit / @jit ================= -->
+    <!-- ============================================ -->
+    <h3 style="color: #58a6ff; border-color: #58a6ff;">1. <code>@njit</code> / <code>@jit</code> — La navaja suiza</h3>
+
+    <h4>¿Qué hace realmente?</h4>
+    <p>Toma tu función Python, analiza el bytecode, infiere los tipos de todas las variables, y genera código máquina nativo vía LLVM. Es como si un compilador de C tomara tu Python y lo convirtiera en un ejecutable. Desde Numba 0.59, <code>@jit</code> y <code>@njit</code> son idénticos.</p>
+
+    <h4>✅ Cuándo usarlo</h4>
+    <ul>
+      <li>Funciones con loops numéricos sobre arrays NumPy</li>
+      <li>Cálculos matemáticos puros (sin I/O, sin strings complejos)</li>
+      <li>Funciones auxiliares pequeñas que serán llamadas desde otro código Numba</li>
+      <li>Cualquier función donde "escribirías un loop en C"</li>
+    </ul>
+
+    <h4>❌ Cuándo NO usarlo</h4>
+    <ul>
+      <li>Funciones que hacen I/O (leer archivos, requests HTTP, print extensivo)</li>
+      <li>Código que manipula strings complejos, listas Python, o DataFrames de Pandas</li>
+      <li>Funciones que ya son 100% operaciones vectorizadas de NumPy (Numba no las acelera mucho más)</li>
+      <li>Scripts cortos que se ejecutan una sola vez (la compilación tarda más que la ejecución)</li>
+    </ul>
+
+    <h4>Ejemplos realistas</h4>
+
+    <p><strong>Ejemplo 1: Filtro de partículas en una simulación física</strong></p>
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">actualizar_particulas</span>(posiciones, velocidades, masas, dt, gravedad):
+    <span class="cm">"""Simulación N-body simplificada: actualiza posiciones por un paso dt."""</span>
+    n = posiciones.shape[<span class="num">0</span>]
+    fuerzas = np.zeros_like(posiciones)
+
+    <span class="cm"># Calcular fuerzas gravitacionales entre pares</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(i + <span class="num">1</span>, n):
+            dx = posiciones[j, <span class="num">0</span>] - posiciones[i, <span class="num">0</span>]
+            dy = posiciones[j, <span class="num">1</span>] - posiciones[i, <span class="num">1</span>]
+            dist_sq = dx * dx + dy * dy + <span class="num">1e-10</span>  <span class="cm"># evitar div/0</span>
+            dist = np.sqrt(dist_sq)
+            fuerza = gravedad * masas[i] * masas[j] / dist_sq
+            fx = fuerza * dx / dist
+            fy = fuerza * dy / dist
+            fuerzas[i, <span class="num">0</span>] += fx
+            fuerzas[i, <span class="num">1</span>] += fy
+            fuerzas[j, <span class="num">0</span>] -= fx
+            fuerzas[j, <span class="num">1</span>] -= fy
+
+    <span class="cm"># Integrar: actualizar velocidades y posiciones</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        velocidades[i, <span class="num">0</span>] += (fuerzas[i, <span class="num">0</span>] / masas[i]) * dt
+        velocidades[i, <span class="num">1</span>] += (fuerzas[i, <span class="num">1</span>] / masas[i]) * dt
+        posiciones[i, <span class="num">0</span>] += velocidades[i, <span class="num">0</span>] * dt
+        posiciones[i, <span class="num">1</span>] += velocidades[i, <span class="num">1</span>] * dt
+
+<span class="cm"># Uso</span>
+n_particulas = <span class="num">1000</span>
+pos = np.random.rand(n_particulas, <span class="num">2</span>) * <span class="num">100</span>
+vel = np.zeros((n_particulas, <span class="num">2</span>))
+masas = np.random.rand(n_particulas) * <span class="num">10</span> + <span class="num">1</span>
+actualizar_particulas(pos, vel, masas, <span class="num">0.01</span>, <span class="num">9.8</span>)
+<span class="cm"># Sin Numba: ~15 segundos | Con @njit: ~0.02 segundos</span></code></pre>
+
+    <p><strong>Ejemplo 2: Búsqueda en historial de precios (datos financieros)</strong></p>
+<pre><code><span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">max_drawdown</span>(precios):
+    <span class="cm">"""Calcula la máxima caída desde un pico en una serie de precios.
+    Métrica fundamental en finanzas para medir riesgo."""</span>
+    n = <span class="fn">len</span>(precios)
+    pico = precios[<span class="num">0</span>]
+    max_dd = <span class="num">0.0</span>
+
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1</span>, n):
+        <span class="kw">if</span> precios[i] > pico:
+            pico = precios[i]
+        dd = (pico - precios[i]) / pico
+        <span class="kw">if</span> dd > max_dd:
+            max_dd = dd
+
+    <span class="kw">return</span> max_dd
+
+<span class="cm"># 10 años de datos diarios</span>
+precios = np.cumsum(np.random.randn(<span class="num">2520</span>)) + <span class="num">100</span>
+resultado = max_drawdown(precios)  <span class="cm"># instantáneo</span></code></pre>
+
+    <p><strong>Ejemplo 3: Procesamiento de señal (correlación cruzada manual)</strong></p>
+<pre><code><span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">cross_correlation</span>(signal, template):
+    <span class="cm">"""Encuentra dónde un template aparece en una señal larga."""</span>
+    n_signal = <span class="fn">len</span>(signal)
+    n_template = <span class="fn">len</span>(template)
+    n_output = n_signal - n_template + <span class="num">1</span>
+    result = np.empty(n_output)
+
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n_output):
+        total = <span class="num">0.0</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(n_template):
+            total += signal[i + j] * template[j]
+        result[i] = total
+
+    <span class="kw">return</span> result</code></pre>
+
+    <h4>🚫 Errores comunes con @njit</h4>
+<pre><code><span class="cm"># ERROR 1: Usar listas Python normales</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">malo_lista</span>(n):
+    resultado = []                  <span class="cm"># ❌ Lista Python, NO funciona</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        resultado.append(i * <span class="num">2</span>)
+    <span class="kw">return</span> resultado
+
+<span class="cm"># SOLUCIÓN: Usa array NumPy o numba.typed.List</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">bueno_array</span>(n):
+    resultado = np.empty(n, dtype=np.int64)  <span class="cm"># ✅ Pre-aloca array</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        resultado[i] = i * <span class="num">2</span>
+    <span class="kw">return</span> resultado
+
+<span class="cm"># ERROR 2: Llamar funciones no soportadas</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">malo_pandas</span>(df):
+    <span class="kw">return</span> df.groupby(<span class="st">'col'</span>).mean()  <span class="cm"># ❌ Pandas NO funciona en Numba</span>
+
+<span class="cm"># ERROR 3: Usar @njit en funciones que YA son rápidas con NumPy</span>
+<span class="dec">@njit</span>   <span class="cm"># ❌ Innecesario: NumPy ya hace esto en C internamente</span>
+<span class="kw">def</span> <span class="fn">innecesario</span>(a, b):
+    <span class="kw">return</span> np.dot(a, b)  <span class="cm"># np.dot ya llama a BLAS optimizado</span>
+
+<span class="cm"># ERROR 4: Olvidar decorar funciones auxiliares</span>
+<span class="kw">def</span> <span class="fn">helper</span>(x):        <span class="cm"># ❌ Sin @njit, Numba sale al intérprete</span>
+    <span class="kw">return</span> x ** <span class="num">2</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">principal</span>(arr):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(arr)):
+        arr[i] = helper(arr[i])  <span class="cm"># Lentísimo: sale de nativo a Python en cada iteración</span></code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ @vectorize =================== -->
+    <!-- ============================================ -->
+    <h3 style="color: #3fb950; border-color: #3fb950;">2. <code>@vectorize</code> — Fábrica de ufuncs escalares</h3>
+
+    <h4>¿Qué hace realmente?</h4>
+    <p>Tú escribes una función que opera sobre <strong>un solo par de valores escalares</strong>. Numba genera automáticamente el loop que aplica esa operación a arrays completos, con soporte automático de broadcasting, reduce, accumulate — como un ufunc nativo de NumPy escrito en C, pero sin escribir C.</p>
+
+    <h4>✅ Cuándo usarlo (en vez de @njit)</h4>
+    <ul>
+      <li>Tu operación es naturalmente <strong>escalar → escalar</strong> (recibe números, devuelve un número)</li>
+      <li>Necesitas <strong>broadcasting</strong> automático entre arrays de distintas formas</li>
+      <li>Necesitas <strong>reduce</strong> o <strong>accumulate</strong> sobre tu operación</li>
+      <li>Quieres paralelizar fácilmente con <code>target='parallel'</code></li>
+    </ul>
+
+    <h4>❌ Cuándo NO usarlo</h4>
+    <ul>
+      <li>Tu función necesita ver más de un elemento a la vez (usa @guvectorize)</li>
+      <li>Tu función tiene estado interno o acumuladores (usa @njit con loop)</li>
+      <li>Solo necesitas aplicar una operación a un array sin broadcasting/reduce (un @njit simple es más directo)</li>
+    </ul>
+
+    <h4>Ejemplos realistas</h4>
+
+    <p><strong>Ejemplo 1: Cálculo de impuestos con tramos progresivos</strong></p>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> vectorize, float64
+
+<span class="dec">@vectorize</span>([float64(float64)])
+<span class="kw">def</span> <span class="fn">calcular_impuesto</span>(ingreso):
+    <span class="cm">"""Impuesto progresivo: aplica a CADA empleado de un array."""</span>
+    <span class="kw">if</span> ingreso <= <span class="num">12000</span>:
+        <span class="kw">return</span> ingreso * <span class="num">0.0</span>
+    <span class="kw">elif</span> ingreso <= <span class="num">30000</span>:
+        <span class="kw">return</span> (ingreso - <span class="num">12000</span>) * <span class="num">0.15</span>
+    <span class="kw">elif</span> ingreso <= <span class="num">60000</span>:
+        <span class="kw">return</span> <span class="num">2700</span> + (ingreso - <span class="num">30000</span>) * <span class="num">0.25</span>
+    <span class="kw">else</span>:
+        <span class="kw">return</span> <span class="num">10200</span> + (ingreso - <span class="num">60000</span>) * <span class="num">0.35</span>
+
+<span class="cm"># Funciona sobre arrays completos automáticamente</span>
+salarios = np.array([<span class="num">8000</span>, <span class="num">25000</span>, <span class="num">45000</span>, <span class="num">120000</span>])
+impuestos = calcular_impuesto(salarios)
+<span class="cm"># → array([0., 1950., 6450., 31200.])</span>
+
+<span class="cm"># ¡Broadcasting gratis! Funciona con matrices también</span>
+salarios_departamentos = np.random.rand(<span class="num">50</span>, <span class="num">200</span>) * <span class="num">80000</span>
+impuestos_todos = calcular_impuesto(salarios_departamentos)  <span class="cm"># shape (50, 200)</span></code></pre>
+
+    <p><strong>Ejemplo 2: Función de activación personalizada para ML</strong></p>
+<pre><code><span class="kw">import</span> math
+
+<span class="dec">@vectorize</span>([float64(float64)], target=<span class="st">'parallel'</span>)
+<span class="kw">def</span> <span class="fn">swish</span>(x):
+    <span class="cm">"""Swish activation: x * sigmoid(x). Mejor que ReLU en muchos casos."""</span>
+    <span class="kw">return</span> x / (<span class="num">1.0</span> + math.exp(-x))
+
+<span class="cm"># Aplicar a toda una capa de red neuronal (millones de valores)</span>
+activaciones = np.random.randn(<span class="num">512</span>, <span class="num">1024</span>)
+resultado = swish(activaciones)  <span class="cm"># Paralelo en todos los cores</span></code></pre>
+
+    <p><strong>Ejemplo 3: Distancia con reduce (¡imposible con @njit!)</strong></p>
+<pre><code><span class="dec">@vectorize</span>([float64(float64, float64)])
+<span class="kw">def</span> <span class="fn">max_custom</span>(a, b):
+    <span class="cm">"""Un max que funciona como ufunc con reduce."""</span>
+    <span class="kw">if</span> a >= b:
+        <span class="kw">return</span> a
+    <span class="kw">return</span> b
+
+data = np.array([<span class="num">3.0</span>, <span class="num">7.0</span>, <span class="num">2.0</span>, <span class="num">9.0</span>, <span class="num">1.0</span>])
+max_custom.reduce(data)  <span class="cm"># → 9.0 (reduce funciona automáticamente)</span>
+
+<span class="cm"># Con una matriz: máximo por filas o columnas</span>
+matrix = np.random.rand(<span class="num">100</span>, <span class="num">50</span>)
+max_custom.reduce(matrix, axis=<span class="num">1</span>)     <span class="cm"># máximo de cada fila</span>
+max_custom.accumulate(matrix, axis=<span class="num">0</span>) <span class="cm"># máximo acumulado por columnas</span></code></pre>
+
+    <h4>🚫 Errores comunes con @vectorize</h4>
+<pre><code><span class="cm"># ERROR 1: Intentar acceder a índices del array</span>
+<span class="dec">@vectorize</span>([float64(float64[:])])  <span class="cm"># ❌ No puedes pasar arrays</span>
+<span class="kw">def</span> <span class="fn">malo</span>(arr):
+    <span class="kw">return</span> arr[<span class="num">0</span>] + arr[<span class="num">1</span>]
+<span class="cm"># vectorize solo recibe ESCALARES. Para arrays usa @guvectorize</span>
+
+<span class="cm"># ERROR 2: Orden incorrecto de signatures (tipos más específicos primero)</span>
+<span class="dec">@vectorize</span>([
+    float64(float64, float64),  <span class="cm"># ❌ float64 antes que int → int nunca se usa</span>
+    int64(int64, int64),
+])
+<span class="kw">def</span> <span class="fn">malo_orden</span>(a, b):
+    <span class="kw">return</span> a + b
+
+<span class="cm"># CORRECTO: tipos más específicos/pequeños primero</span>
+<span class="dec">@vectorize</span>([
+    int32(int32, int32),     <span class="cm"># ✅ Más específico primero</span>
+    int64(int64, int64),
+    float32(float32, float32),
+    float64(float64, float64),
+])
+<span class="kw">def</span> <span class="fn">bien_orden</span>(a, b):
+    <span class="kw">return</span> a + b
+
+<span class="cm"># ERROR 3: Usar target='parallel' con datos muy pequeños</span>
+<span class="dec">@vectorize</span>([float64(float64)], target=<span class="st">'parallel'</span>)
+<span class="kw">def</span> <span class="fn">doble</span>(x):
+    <span class="kw">return</span> x * <span class="num">2</span>
+
+doble(np.array([<span class="num">1.0</span>, <span class="num">2.0</span>, <span class="num">3.0</span>]))  <span class="cm"># ❌ 3 elementos: el overhead de threading</span>
+                                      <span class="cm">#    es mayor que el cálculo en sí</span></code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ @guvectorize ================= -->
+    <!-- ============================================ -->
+    <h3 style="color: #d2a8ff; border-color: #d2a8ff;">3. <code>@guvectorize</code> — Ufuncs sobre sub-arrays</h3>
+
+    <h4>¿Qué hace realmente?</h4>
+    <p>Como <code>@vectorize</code>, pero tu función recibe <strong>porciones de arrays</strong> (filas, vectores, submatrices) en lugar de escalares. Tú defines un "layout" simbólico que dice qué dimensiones tiene cada argumento. NumPy se encarga del broadcasting y de iterar sobre las dimensiones externas.</p>
+
+    <h4>✅ Cuándo usarlo (en vez de @njit o @vectorize)</h4>
+    <ul>
+      <li>Tu operación necesita ver <strong>una fila/vector/subarray completo</strong> para producir un resultado</li>
+      <li>Quieres aplicar la misma operación a cada fila de una matriz, cada frame de un video, etc.</li>
+      <li>Necesitas broadcasting automático entre inputs de diferentes dimensiones</li>
+      <li>Estás implementando algo tipo: media por fila, normalización por vector, convolución 1D por canal</li>
+    </ul>
+
+    <h4>❌ Cuándo NO usarlo</h4>
+    <ul>
+      <li>Tu operación es escalar → escalar (usa @vectorize, es más simple)</li>
+      <li>Tienes un solo array y un loop secuencial con dependencias (usa @njit)</li>
+      <li>No necesitas broadcasting — un @njit simple es más legible</li>
+    </ul>
+
+    <h4>Ejemplos realistas</h4>
+
+    <p><strong>Ejemplo 1: Normalización por filas (muy común en ML)</strong></p>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> guvectorize, float64
+
+<span class="dec">@guvectorize</span>(
+    [(float64[:], float64[:])],
+    <span class="st">'(n)->(n)'</span>  <span class="cm"># recibe vector de n elementos, devuelve vector de n</span>
+)
+<span class="kw">def</span> <span class="fn">normalize_row</span>(row, result):
+    <span class="cm">"""Normaliza un vector a norma unitaria (L2)."""</span>
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(row.shape[<span class="num">0</span>]):
+        total += row[i] ** <span class="num">2</span>
+    norm = np.sqrt(total)
+    <span class="kw">if</span> norm > <span class="num">0</span>:
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(row.shape[<span class="num">0</span>]):
+            result[i] = row[i] / norm
+    <span class="kw">else</span>:
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(row.shape[<span class="num">0</span>]):
+            result[i] = <span class="num">0.0</span>
+
+<span class="cm"># Aplica automáticamente a CADA FILA de una matriz</span>
+embeddings = np.random.rand(<span class="num">10000</span>, <span class="num">768</span>)  <span class="cm"># 10K vectores de 768 dimensiones</span>
+normalized = normalize_row(embeddings)    <span class="cm"># shape (10000, 768), cada fila normalizada</span></code></pre>
+
+    <p><strong>Ejemplo 2: Media móvil por serie temporal (datos financieros)</strong></p>
+<pre><code><span class="dec">@guvectorize</span>(
+    [(float64[:], float64[:], float64[:])],
+    <span class="st">'(n),(m)->(n)'</span>  <span class="cm"># señal de n puntos, ventana de m pesos → n resultados</span>
+)
+<span class="kw">def</span> <span class="fn">weighted_moving_avg</span>(signal, weights, result):
+    <span class="cm">"""Media móvil ponderada. weights define la ventana."""</span>
+    m = weights.shape[<span class="num">0</span>]
+    w_sum = <span class="num">0.0</span>
+    <span class="kw">for</span> k <span class="kw">in</span> <span class="fn">range</span>(m):
+        w_sum += weights[k]
+
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(signal.shape[<span class="num">0</span>]):
+        <span class="kw">if</span> i < m - <span class="num">1</span>:
+            result[i] = np.nan  <span class="cm"># no hay suficientes datos</span>
+        <span class="kw">else</span>:
+            total = <span class="num">0.0</span>
+            <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(m):
+                total += signal[i - m + <span class="num">1</span> + j] * weights[j]
+            result[i] = total / w_sum
+
+<span class="cm"># 500 acciones, 252 días de cotización cada una</span>
+cotizaciones = np.random.rand(<span class="num">500</span>, <span class="num">252</span>) * <span class="num">100</span> + <span class="num">50</span>
+pesos = np.array([<span class="num">1.0</span>, <span class="num">2.0</span>, <span class="num">3.0</span>, <span class="num">4.0</span>, <span class="num">5.0</span>])  <span class="cm"># ventana de 5 días, peso creciente</span>
+medias = weighted_moving_avg(cotizaciones, pesos)  <span class="cm"># shape (500, 252)</span>
+<span class="cm"># ¡Broadcasting automático! La misma ventana se aplica a las 500 series</span></code></pre>
+
+    <p><strong>Ejemplo 3: Distancia euclidiana entre dos conjuntos de vectores</strong></p>
+<pre><code><span class="dec">@guvectorize</span>(
+    [(float64[:], float64[:], float64[:])],
+    <span class="st">'(d),(d)->()'</span>  <span class="cm"># dos vectores de d dimensiones → un escalar</span>
+)
+<span class="kw">def</span> <span class="fn">euclidean_dist</span>(a, b, result):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(a.shape[<span class="num">0</span>]):
+        diff = a[i] - b[i]
+        total += diff * diff
+    result[<span class="num">0</span>] = np.sqrt(total)
+
+<span class="cm"># Distancia entre 1000 pares de vectores 3D</span>
+puntos_a = np.random.rand(<span class="num">1000</span>, <span class="num">3</span>)
+puntos_b = np.random.rand(<span class="num">1000</span>, <span class="num">3</span>)
+distancias = euclidean_dist(puntos_a, puntos_b)  <span class="cm"># shape (1000,)</span>
+
+<span class="cm"># Broadcasting: distancia de UN punto a TODOS los demás</span>
+query = np.array([<span class="num">0.5</span>, <span class="num">0.5</span>, <span class="num">0.5</span>])
+todas_dist = euclidean_dist(puntos_a, query)  <span class="cm"># shape (1000,) — automático</span></code></pre>
+
+    <h4>🚫 Errores comunes con @guvectorize</h4>
+<pre><code><span class="cm"># ERROR 1: Intentar retornar un valor (como en @vectorize)</span>
+<span class="dec">@guvectorize</span>([(float64[:], float64[:])], <span class="st">'(n)->()'</span>)
+<span class="kw">def</span> <span class="fn">malo</span>(arr, result):
+    <span class="kw">return</span> np.sum(arr)  <span class="cm"># ❌ El return se IGNORA</span>
+    <span class="cm"># ✅ Debes escribir en result[0] = np.sum(arr)</span>
+
+<span class="cm"># ERROR 2: Layout incorrecto — olvidar los paréntesis del escalar</span>
+<span class="cm"># Escalar en el layout se escribe como () no como (1)</span>
+<span class="st">'(n)->(1)'</span>   <span class="cm"># ❌ Esto crea un array de 1 elemento</span>
+<span class="st">'(n)->()'</span>    <span class="cm"># ✅ Esto crea un escalar</span>
+
+<span class="cm"># ERROR 3: Modificar un array de entrada pensando que se guarda</span>
+<span class="dec">@guvectorize</span>([(float64[:], float64[:])], <span class="st">'()->()'</span>)
+<span class="kw">def</span> <span class="fn">malo_overwrite</span>(inval, outval):
+    inval[<span class="num">0</span>] = <span class="num">99.0</span>   <span class="cm"># ❌ Puede no guardarse si NumPy hizo un cast</span>
+    outval[<span class="num">0</span>] = <span class="num">42.0</span>
+<span class="cm"># SOLUCIÓN: usa writable_args=('inval',) si necesitas modificar inputs</span></code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ @stencil ===================== -->
+    <!-- ============================================ -->
+    <h3 style="color: #f0883e; border-color: #f0883e;">4. <code>@stencil</code> — Patrones de vecindario</h3>
+
+    <h4>¿Qué hace realmente?</h4>
+    <p>Defines cómo calcular UN elemento del resultado en función de sus <strong>vecinos</strong> en el array de entrada (usando índices relativos). Numba genera todo el loop y maneja los bordes automáticamente. Cuando se combina con <code>parallel=True</code>, se paraleliza.</p>
+
+    <h4>✅ Cuándo usarlo</h4>
+    <ul>
+      <li>Procesamiento de imágenes (blur, detección de bordes, sharpening)</li>
+      <li>Simulaciones de ecuaciones diferenciales parciales (difusión de calor, Laplace)</li>
+      <li>Autómatas celulares (Game of Life, etc.)</li>
+      <li>Cualquier cálculo donde el resultado en (i,j) depende de valores vecinos en el input</li>
+    </ul>
+
+    <h4>❌ Cuándo NO usarlo</h4>
+    <ul>
+      <li>Operaciones que no dependen de vecinos (usa @vectorize o @njit)</li>
+      <li>El "vecindario" es variable o depende de los datos (usa @njit con loop manual)</li>
+      <li>Necesitas acceder a posiciones absolutas, no relativas (o usa <code>standard_indexing</code>)</li>
+    </ul>
+
+    <h4>Ejemplos realistas</h4>
+
+    <p><strong>Ejemplo 1: Detección de bordes (Sobel) en una imagen</strong></p>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> stencil, njit, prange
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="dec">@stencil</span>
+<span class="kw">def</span> <span class="fn">sobel_x</span>(img):
+    <span class="cm">"""Filtro Sobel horizontal: detecta bordes verticales."""</span>
+    <span class="kw">return</span> (-<span class="num">1</span> * img[<span class="num">-1</span>, <span class="num">-1</span>] + <span class="num">0</span> * img[<span class="num">-1</span>, <span class="num">0</span>] + <span class="num">1</span> * img[<span class="num">-1</span>, <span class="num">1</span>] +
+            -<span class="num">2</span> * img[ <span class="num">0</span>, <span class="num">-1</span>] + <span class="num">0</span> * img[ <span class="num">0</span>, <span class="num">0</span>] + <span class="num">2</span> * img[ <span class="num">0</span>, <span class="num">1</span>] +
+            -<span class="num">1</span> * img[ <span class="num">1</span>, <span class="num">-1</span>] + <span class="num">0</span> * img[ <span class="num">1</span>, <span class="num">0</span>] + <span class="num">1</span> * img[ <span class="num">1</span>, <span class="num">1</span>])
+
+<span class="dec">@stencil</span>
+<span class="kw">def</span> <span class="fn">sobel_y</span>(img):
+    <span class="cm">"""Filtro Sobel vertical: detecta bordes horizontales."""</span>
+    <span class="kw">return</span> (-<span class="num">1</span> * img[<span class="num">-1</span>, <span class="num">-1</span>] - <span class="num">2</span> * img[<span class="num">-1</span>, <span class="num">0</span>] - <span class="num">1</span> * img[<span class="num">-1</span>, <span class="num">1</span>] +
+             <span class="num">1</span> * img[ <span class="num">1</span>, <span class="num">-1</span>] + <span class="num">2</span> * img[ <span class="num">1</span>, <span class="num">0</span>] + <span class="num">1</span> * img[ <span class="num">1</span>, <span class="num">1</span>])
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">edge_detection</span>(imagen):
+    <span class="cm">"""Magnitud del gradiente = sqrt(Gx² + Gy²)"""</span>
+    gx = sobel_x(imagen)
+    gy = sobel_y(imagen)
+    <span class="cm"># np.sqrt se paraleliza automáticamente</span>
+    <span class="kw">return</span> np.sqrt(gx ** <span class="num">2</span> + gy ** <span class="num">2</span>)
+
+imagen = np.random.rand(<span class="num">1920</span>, <span class="num">1080</span>)  <span class="cm"># imagen Full HD</span>
+bordes = edge_detection(imagen)</code></pre>
+
+    <p><strong>Ejemplo 2: Simulación de difusión de calor</strong></p>
+<pre><code><span class="dec">@stencil</span>
+<span class="kw">def</span> <span class="fn">heat_step</span>(T):
+    <span class="cm">"""Un paso de la ecuación de calor 2D discretizada."""</span>
+    <span class="kw">return</span> <span class="num">0.25</span> * (T[<span class="num">-1</span>, <span class="num">0</span>] + T[<span class="num">1</span>, <span class="num">0</span>] + T[<span class="num">0</span>, <span class="num">-1</span>] + T[<span class="num">0</span>, <span class="num">1</span>])
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">simulate_heat</span>(grid, n_steps):
+    <span class="cm">"""Simula difusión de calor por n pasos."""</span>
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(n_steps):
+        grid = heat_step(grid)
+    <span class="kw">return</span> grid
+
+<span class="cm"># Placa de metal 200x200, caliente en el centro</span>
+placa = np.zeros((<span class="num">200</span>, <span class="num">200</span>))
+placa[<span class="num">90</span>:<span class="num">110</span>, <span class="num">90</span>:<span class="num">110</span>] = <span class="num">100.0</span>  <span class="cm"># fuente de calor</span>
+resultado = simulate_heat(placa, <span class="num">500</span>)</code></pre>
+
+    <p><strong>Ejemplo 3: Suavizado de datos de sensor (1D)</strong></p>
+<pre><code><span class="dec">@stencil</span>(neighborhood=((<span class="num">-2</span>, <span class="num">2</span>),))
+<span class="kw">def</span> <span class="fn">smooth_sensor</span>(data):
+    <span class="cm">"""Suavizado con ventana de 5 puntos (media simple)."""</span>
+    <span class="kw">return</span> (data[<span class="num">-2</span>] + data[<span class="num">-1</span>] + data[<span class="num">0</span>] + data[<span class="num">1</span>] + data[<span class="num">2</span>]) / <span class="num">5.0</span>
+
+sensor_ruidoso = np.sin(np.linspace(<span class="num">0</span>, <span class="num">10</span>, <span class="num">10000</span>)) + np.random.randn(<span class="num">10000</span>) * <span class="num">0.3</span>
+sensor_limpio = smooth_sensor(sensor_ruidoso)</code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ @jitclass ==================== -->
+    <!-- ============================================ -->
+    <h3 style="color: #f85149; border-color: #f85149;">5. <code>@jitclass</code> — Clases con estado compilado</h3>
+
+    <h4>¿Qué hace realmente?</h4>
+    <p>Compila una clase entera: los datos se almacenan como una estructura C en memoria (sin overhead de objetos Python) y todos los métodos se compilan a nopython. Ideal cuando necesitas <strong>encapsular estado mutable</strong> y operarlo eficientemente.</p>
+
+    <h4>✅ Cuándo usarlo</h4>
+    <ul>
+      <li>Simulaciones donde entidades tienen estado (partículas, agentes, celdas)</li>
+      <li>Estructuras de datos numéricas personalizadas (matrices sparse, árboles KD simplificados)</li>
+      <li>Algoritmos iterativos con estado (optimizadores, filtros Kalman)</li>
+    </ul>
+
+    <h4>❌ Cuándo NO usarlo</h4>
+    <ul>
+      <li>Solo necesitas funciones sin estado → usa @njit</li>
+      <li>Tu clase tiene herencia compleja, propiedades dinámicas, o métodos con strings → no es compatible</li>
+      <li>Solo necesitas pasar datos entre funciones → un namedtuple o un array es más simple</li>
+    </ul>
+
+    <h4>Ejemplos realistas</h4>
+
+    <p><strong>Ejemplo 1: Filtro Kalman 1D para tracking de sensor</strong></p>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> float64
+<span class="kw">from</span> numba.experimental <span class="kw">import</span> jitclass
+
+<span class="dec">@jitclass</span>([
+    (<span class="st">'x'</span>, float64),         <span class="cm"># estimación actual</span>
+    (<span class="st">'P'</span>, float64),         <span class="cm"># incertidumbre</span>
+    (<span class="st">'Q'</span>, float64),         <span class="cm"># ruido del proceso</span>
+    (<span class="st">'R'</span>, float64),         <span class="cm"># ruido de medición</span>
+])
+<span class="kw">class</span> <span class="fn">KalmanFilter1D</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, x0, P0, Q, R):
+        self.x = x0
+        self.P = P0
+        self.Q = Q
+        self.R = R
+
+    <span class="kw">def</span> <span class="fn">predict</span>(self):
+        <span class="cm"># En modelo simple: predicción = estado anterior</span>
+        self.P += self.Q
+
+    <span class="kw">def</span> <span class="fn">update</span>(self, measurement):
+        K = self.P / (self.P + self.R)   <span class="cm"># Kalman gain</span>
+        self.x += K * (measurement - self.x)
+        self.P *= (<span class="num">1.0</span> - K)
+
+    <span class="kw">def</span> <span class="fn">filter_signal</span>(self, measurements, output):
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(measurements)):
+            self.predict()
+            self.update(measurements[i])
+            output[i] = self.x
+
+<span class="cm"># Uso</span>
+kf = KalmanFilter1D(x0=<span class="num">0.0</span>, P0=<span class="num">1.0</span>, Q=<span class="num">0.01</span>, R=<span class="num">0.5</span>)
+mediciones = np.sin(np.linspace(<span class="num">0</span>, <span class="num">10</span>, <span class="num">1000</span>)) + np.random.randn(<span class="num">1000</span>) * <span class="num">0.5</span>
+salida = np.empty(<span class="num">1000</span>)
+kf.filter_signal(mediciones, salida)</code></pre>
+
+    <p><strong>Ejemplo 2: Acumulador de estadísticas online (Welford)</strong></p>
+<pre><code><span class="dec">@jitclass</span>([
+    (<span class="st">'n'</span>, float64),
+    (<span class="st">'mean'</span>, float64),
+    (<span class="st">'M2'</span>, float64),
+])
+<span class="kw">class</span> <span class="fn">OnlineStats</span>:
+    <span class="cm">"""Calcula media y varianza incrementalmente (Welford's algorithm).
+    Útil cuando los datos llegan en streaming y no caben en memoria."""</span>
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        self.n = <span class="num">0.0</span>
+        self.mean = <span class="num">0.0</span>
+        self.M2 = <span class="num">0.0</span>
+
+    <span class="kw">def</span> <span class="fn">add</span>(self, x):
+        self.n += <span class="num">1</span>
+        delta = x - self.mean
+        self.mean += delta / self.n
+        delta2 = x - self.mean
+        self.M2 += delta * delta2
+
+    <span class="kw">def</span> <span class="fn">variance</span>(self):
+        <span class="kw">if</span> self.n < <span class="num">2</span>:
+            <span class="kw">return</span> <span class="num">0.0</span>
+        <span class="kw">return</span> self.M2 / (self.n - <span class="num">1</span>)
+
+<span class="cm"># Procesar un stream de datos enorme</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">procesar_stream</span>(data):
+    stats = OnlineStats()
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        stats.add(data[i])
+    <span class="kw">return</span> stats.mean, stats.variance()
+
+data = np.random.randn(<span class="num">10_000_000</span>)
+media, var = procesar_stream(data)</code></pre>
+
+    <h4>🚫 Errores comunes con @jitclass</h4>
+<pre><code><span class="cm"># ERROR 1: No inicializar contenedores en __init__</span>
+<span class="dec">@jitclass</span>([(<span class="st">'d'</span>, types.DictType(types.int64, types.float64))])
+<span class="kw">class</span> <span class="fn">Malo</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        self.d[<span class="num">1</span>] = <span class="num">10.0</span>  <span class="cm"># ❌ SEGFAULT: d no fue inicializado</span>
+
+<span class="cm"># CORRECTO:</span>
+<span class="kw">def</span> <span class="fn">__init__</span>(self):
+    self.d = typed.Dict.empty(types.int64, types.float64)  <span class="cm"># ✅ primero inicializar</span>
+    self.d[<span class="num">1</span>] = <span class="num">10.0</span>
+
+<span class="cm"># ERROR 2: NumPy arrays necesitan spec explícito (no se infieren de annotations)</span>
+<span class="dec">@jitclass</span>
+<span class="kw">class</span> <span class="fn">Malo2</span>:
+    data: np.ndarray  <span class="cm"># ❌ Numba no sabe el dtype ni dimensiones</span>
+
+<span class="cm"># CORRECTO: spec explícito para arrays</span>
+<span class="dec">@jitclass</span>([(<span class="st">'data'</span>, float64[:])])
+<span class="kw">class</span> <span class="fn">Bueno</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, n):
+        self.data = np.zeros(n)</code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ @cfunc ======================= -->
+    <!-- ============================================ -->
+    <h3 style="color: #8b949e; border-color: #8b949e;">6. <code>@cfunc</code> — Callbacks para C/Fortran</h3>
+
+    <h4>¿Qué hace realmente?</h4>
+    <p>Compila una función Python en un callback con convención de llamada C. Es la forma de pasar funciones Numba a librerías C o a <code>scipy.integrate</code>, <code>scipy.optimize</code>, etc.</p>
+
+    <h4>✅ Cuándo usarlo</h4>
+    <ul>
+      <li>Quieres pasar una función como callback a <code>scipy.integrate.quad</code></li>
+      <li>Interactúas con código C/Fortran vía ctypes</li>
+      <li>Necesitas una función llamable desde fuera de Python</li>
+    </ul>
+
+    <h4>Ejemplo realista</h4>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> cfunc, float64
+<span class="kw">from</span> scipy <span class="kw">import</span> integrate
+
+<span class="cm"># Integración numérica con SciPy, pero el integrando es Numba-compilado</span>
+<span class="dec">@cfunc</span>(float64(float64))
+<span class="kw">def</span> <span class="fn">integrando</span>(x):
+    <span class="kw">return</span> np.exp(-x ** <span class="num">2</span>) * np.cos(<span class="num">2</span> * x)
+
+<span class="cm"># .ctypes pasa el puntero C a SciPy</span>
+resultado, error = integrate.quad(integrando.ctypes, <span class="num">0</span>, <span class="num">10</span>)
+<span class="cm"># Mucho más rápido que pasar una función Python normal a quad()</span></code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ @overload ==================== -->
+    <!-- ============================================ -->
+    <h3 style="color: #58a6ff; border-color: #58a6ff;">7. <code>@overload</code> — Extender el ecosistema</h3>
+
+    <h4>¿Qué hace realmente?</h4>
+    <p>Te permite enseñarle a Numba cómo ejecutar funciones que no soporta nativamente. Defines una implementación alternativa que Numba usará en nopython mode. Se ejecuta en <strong>compile time</strong> (no runtime) — Numba llama a tu overload con los TIPOS de los argumentos, y tú devuelves una función que se compilará.</p>
+
+    <h4>✅ Cuándo usarlo</h4>
+    <ul>
+      <li>Usas una función de terceros dentro de @njit que Numba no soporta</li>
+      <li>Quieres que funciones de tu librería sean usables en código Numba</li>
+      <li>Necesitas comportamiento polimórfico (diferente implementación según el tipo)</li>
+    </ul>
+
+    <h4>Ejemplo realista</h4>
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> types
+<span class="kw">from</span> numba.extending <span class="kw">import</span> overload
+
+<span class="cm"># Supón que tienes esta función Python que usas en tu proyecto</span>
+<span class="kw">def</span> <span class="fn">clip</span>(value, low, high):
+    <span class="kw">return</span> min(max(value, low), high)
+
+<span class="cm"># La haces funcionar dentro de @njit</span>
+<span class="dec">@overload</span>(clip)
+<span class="kw">def</span> <span class="fn">clip_overload</span>(value, low, high):
+    <span class="cm"># Este código se ejecuta en COMPILE TIME</span>
+    <span class="cm"># value, low, high son TIPOS, no valores</span>
+    <span class="kw">if</span> <span class="fn">isinstance</span>(value, types.Float):
+        <span class="kw">def</span> <span class="fn">impl</span>(value, low, high):
+            <span class="cm"># Este código se ejecuta en RUNTIME</span>
+            <span class="kw">if</span> value < low:
+                <span class="kw">return</span> low
+            <span class="kw">elif</span> value > high:
+                <span class="kw">return</span> high
+            <span class="kw">return</span> value
+        <span class="kw">return</span> impl
+    <span class="cm"># Si retorna None, Numba prueba otros overloads</span>
+
+<span class="cm"># Ahora clip() funciona dentro de código @njit</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">procesar</span>(arr):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(arr)):
+        arr[i] = clip(arr[i], <span class="num">0.0</span>, <span class="num">1.0</span>)  <span class="cm"># ✅ Funciona gracias al overload</span>
+    <span class="kw">return</span> arr</code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ COMPARACIÓN DIRECTA ========== -->
+    <!-- ============================================ -->
+    <h3>📊 Comparación directa: el mismo problema, diferentes decoradores</h3>
+    <p>Para que quede claro cuándo elegir cada uno, veamos cómo resolverías <strong>"calcular la norma L2 de vectores"</strong> con cada decorador y por qué elegirías uno u otro.</p>
+
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit, vectorize, guvectorize, stencil, float64, prange
+
+<span class="cm"># ─── OPCIÓN A: @njit ───</span>
+<span class="cm"># Cuando tienes UNA matriz y quieres las normas de cada fila</span>
+<span class="cm"># Más control, escribes el loop tú mismo</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">normas_njit</span>(matrix):
+    n_rows = matrix.shape[<span class="num">0</span>]
+    result = np.empty(n_rows)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n_rows):
+        total = <span class="num">0.0</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):
+            total += matrix[i, j] ** <span class="num">2</span>
+        result[i] = np.sqrt(total)
+    <span class="kw">return</span> result
+<span class="cm"># ✅ Mejor cuando: necesitas control total del loop, o la lógica es compleja</span>
+<span class="cm"># ❌ Evitar cuando: necesitas broadcasting automático</span>
+
+<span class="cm"># ─── OPCIÓN B: @guvectorize ───</span>
+<span class="cm"># Cuando quieres que funcione con arrays de CUALQUIER forma via broadcasting</span>
+<span class="dec">@guvectorize</span>([(float64[:], float64[:])], <span class="st">'(n)->()'</span>)
+<span class="kw">def</span> <span class="fn">norma_guv</span>(vec, result):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(vec.shape[<span class="num">0</span>]):
+        total += vec[i] ** <span class="num">2</span>
+    result[<span class="num">0</span>] = np.sqrt(total)
+<span class="cm"># ✅ Mejor cuando: quieres broadcasting automático</span>
+<span class="cm">#    norma_guv(vector_1d) → escalar</span>
+<span class="cm">#    norma_guv(matrix_2d) → vector (norma por fila)</span>
+<span class="cm">#    norma_guv(tensor_3d) → matrix (norma por última dimensión)</span>
+
+<span class="cm"># ─── OPCIÓN C: @vectorize ───</span>
+<span class="cm"># NO es adecuado aquí porque vectorize es para operaciones escalar→escalar</span>
+<span class="cm"># La norma necesita ver el vector completo, no elemento por elemento</span>
+
+<span class="cm"># ─── OPCIÓN D: @stencil ───</span>
+<span class="cm"># NO es adecuado aquí porque la norma no es un patrón de vecindario</span>
+<span class="cm"># Stencil es para cuando el resultado en posición [i] depende de [i-1], [i+1], etc.</span></code></pre>
+
+    <!-- ============================================ -->
+    <!-- ============ RESUMEN FINAL ================ -->
+    <!-- ============================================ -->
+    <h3>🎯 Resumen final: árbol de decisión</h3>
+<pre><code><span class="cm">¿Qué tipo de operación tienes?
+│
+├─ Escalar → Escalar (sin ver vecinos ni el array completo)
+│  └─ ¿Necesitas broadcasting/reduce/accumulate?
+│     ├─ SÍ → <strong style="color:#3fb950">@vectorize</strong>
+│     └─ NO → <strong style="color:#58a6ff">@njit</strong> (más simple)
+│
+├─ Sub-array → Escalar o Sub-array (operas sobre filas, vectores, etc.)
+│  └─ ¿Necesitas broadcasting entre inputs de distintas dimensiones?
+│     ├─ SÍ → <strong style="color:#d2a8ff">@guvectorize</strong>
+│     └─ NO → <strong style="color:#58a6ff">@njit</strong> con loop manual
+│
+├─ Cada resultado depende de VECINOS en un patrón fijo
+│  └─ <strong style="color:#f0883e">@stencil</strong> (+ parallel=True en la función que lo llama)
+│
+├─ Necesitas una clase con estado y métodos rápidos
+│  └─ <strong style="color:#f85149">@jitclass</strong>
+│
+├─ Necesitas pasar una función como callback a C/SciPy
+│  └─ <strong style="color:#8b949e">@cfunc</strong>
+│
+└─ Necesitas que una función externa funcione dentro de @njit
+   └─ <strong style="color:#58a6ff">@overload</strong></span></code></pre>
+
+    <div class="tip">
+      <strong>Regla de oro:</strong> Empieza siempre con <code>@njit</code>. Solo cambia a otro decorador cuando necesites una capacidad específica que <code>@njit</code> no te da (broadcasting → @vectorize/@guvectorize, vecinos → @stencil, estado → @jitclass).
+    </div>
+
+  </div>
+</div>
+
+
+
+
+<!-- ==================== MÓDULO 10 ==================== -->
+<div class="module" id="m10">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">10</span> Cheatsheet y Patrones Comunes</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <h3>Referencia rápida de decoradores</h3>
+    <table>
+      <tr><th>Decorador</th><th>Para qué</th><th>Ejemplo clave</th></tr>
+      <tr><td><code>@jit / @njit</code></td><td>Compilar funciones generales</td><td><code>@njit(parallel=True, fastmath=True, cache=True)</code></td></tr>
+      <tr><td><code>@vectorize</code></td><td>Crear ufuncs (escalar→escalar)</td><td><code>@vectorize([float64(float64, float64)])</code></td></tr>
+      <tr><td><code>@guvectorize</code></td><td>Ufuncs generalizados (array→array)</td><td><code>@guvectorize([(f64[:], f64[:])], '(n)->()')</code></td></tr>
+      <tr><td><code>@stencil</code></td><td>Operaciones sobre vecindarios</td><td><code>@stencil(neighborhood=((-1,1),(-1,1)))</code></td></tr>
+      <tr><td><code>@jitclass</code></td><td>Clases compiladas con estado</td><td><code>@jitclass([('x', float64)])</code></td></tr>
+      <tr><td><code>@cfunc</code></td><td>Crear callbacks C</td><td><code>@cfunc("float64(float64)")</code></td></tr>
+      <tr><td><code>@overload</code></td><td>Extender funciones para nopython</td><td><code>@overload(mi_funcion)</code></td></tr>
+      <tr><td><code>@intrinsic</code></td><td>Generar LLVM IR directamente</td><td>Para expertos en LLVM</td></tr>
+    </table>
+
+    <h3>Opciones de @jit combinadas</h3>
+<pre><code><span class="cm"># El "full power" Numba decorator</span>
+<span class="dec">@njit</span>(
+    parallel=<span class="num">True</span>,     <span class="cm"># Auto-paralelizar operaciones</span>
+    fastmath=<span class="num">True</span>,     <span class="cm"># Relajar IEEE 754</span>
+    cache=<span class="num">True</span>,        <span class="cm"># Guardar compilación en disco</span>
+    nogil=<span class="num">True</span>,        <span class="cm"># Liberar GIL para multithreading</span>
+    boundscheck=<span class="num">False</span>, <span class="cm"># No verificar límites de array (default)</span>
+    error_model=<span class="st">'numpy'</span>,  <span class="cm"># Seguir semántica de errores de NumPy</span>
+)
+<span class="kw">def</span> <span class="fn">ultimate_function</span>(data):
+    ...</code></pre>
+
+    <h3>Patrón: Procesar datos en paralelo con threading</h3>
+<pre><code><span class="kw">import</span> threading
+<span class="kw">from</span> numba <span class="kw">import</span> njit
+
+<span class="dec">@njit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process_chunk</span>(data, result, start, end):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(start, end):
+        result[i] = np.sqrt(data[i]) * np.log(data[i] + <span class="num">1</span>)
+
+<span class="cm"># Dividir trabajo en threads</span>
+data = np.random.rand(<span class="num">10_000_000</span>)
+result = np.empty_like(data)
+n_threads = <span class="num">4</span>
+chunk = <span class="fn">len</span>(data) // n_threads
+
+threads = []
+<span class="kw">for</span> t <span class="kw">in</span> <span class="fn">range</span>(n_threads):
+    start = t * chunk
+    end = start + chunk <span class="kw">if</span> t < n_threads - <span class="num">1</span> <span class="kw">else</span> <span class="fn">len</span>(data)
+    thread = threading.Thread(target=process_chunk, args=(data, result, start, end))
+    threads.append(thread)
+    thread.start()
+<span class="kw">for</span> t <span class="kw">in</span> threads:
+    t.join()</code></pre>
+
+    <h3>Patrón: Ahead-of-Time compilation</h3>
+<pre><code><span class="kw">from</span> numba.pycc <span class="kw">import</span> CC
+
+cc = CC(<span class="st">'my_module'</span>)
+
+<span class="dec">@cc.export</span>(<span class="st">'multf'</span>, <span class="st">'f8(f8, f8)'</span>)
+<span class="kw">def</span> <span class="fn">mult</span>(a, b):
+    <span class="kw">return</span> a * b
+
+<span class="dec">@cc.export</span>(<span class="st">'square'</span>, <span class="st">'f8(f8)'</span>)
+<span class="kw">def</span> <span class="fn">square</span>(a):
+    <span class="kw">return</span> a ** <span class="num">2</span>
+
+cc.compile()  <span class="cm"># Genera my_module.so / my_module.pyd</span>
+<span class="cm"># Luego: import my_module; my_module.multf(3.0, 4.0)</span></code></pre>
+
+    <h3>Variables de entorno útiles</h3>
+    <table>
+      <tr><th>Variable</th><th>Efecto</th></tr>
+      <tr><td><code>NUMBA_NUM_THREADS=N</code></td><td>Número de threads para paralelismo</td></tr>
+      <tr><td><code>NUMBA_PARALLEL_DIAGNOSTICS=4</code></td><td>Diagnósticos de auto-paralelización</td></tr>
+      <tr><td><code>NUMBA_DEVELOPER_MODE=1</code></td><td>Mensajes de error detallados</td></tr>
+      <tr><td><code>NUMBA_DISABLE_JIT=1</code></td><td>Desactiva JIT (para debugging)</td></tr>
+      <tr><td><code>NUMBA_CACHE_DIR=path</code></td><td>Directorio para el cache de compilación</td></tr>
+      <tr><td><code>NUMBA_THREADING_LAYER=tbb</code></td><td>Seleccionar backend de threading (tbb/omp/workqueue)</td></tr>
+    </table>
+
+    <h3>Lo que Numba NO soporta (trampas comunes)</h3>
+    <ul>
+      <li>Listas de Python estándar (usa <code>numba.typed.List</code>)</li>
+      <li>Diccionarios Python estándar (usa <code>numba.typed.Dict</code>)</li>
+      <li>Excepciones personalizadas con argumentos</li>
+      <li>Clases regulares de Python (usa <code>@jitclass</code>)</li>
+      <li><code>try/except</code> limitado (solo excepciones básicas)</li>
+      <li>Strings con operaciones complejas</li>
+      <li>Generadores con <code>yield</code> (soporte limitado)</li>
+      <li>Recursión con tipos diferentes en cada nivel</li>
+      <li><code>**kwargs</code> (solo <code>*args</code> limitado)</li>
+    </ul>
+
+    <div class="tip">
+      <strong>Regla de oro:</strong> Si tu código es principalmente numérico con arrays NumPy y loops, Numba lo acelerará. Si depende mucho de objetos Python, strings, o I/O, busca otras herramientas (Cython, C extensions).
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+function toggle(header) {
+  header.parentElement.classList.toggle('open');
+}
+</script>
+
+</body>
+</html>
