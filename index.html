@@ -1820,15 +1820,642 @@ benchmark(process, data32, label=<span class="st">"float32 (40MB)"</span>)
 
   </div>
 </div>
+
+        
+<a href="#m-threading">🧵 Threading y Paralelismo para Datos Masivos</a>
+<!--
+  ============================================================
+  MÓDULO: Threading y Paralelismo para Datos Masivos
+  ============================================================
+-->
+
+<!-- ==================== MÓDULO THREADING ==================== -->
+<div class="module" id="m-threading">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">🧵</span> Threading y Paralelismo: El Multiplicador de Fuerza</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <p>Ya sabes cómo hacer que un solo core trabaje al máximo (memoria, cache, layout). Ahora multiplicamos eso por <strong>todos los cores</strong>. Pero el paralelismo mal aplicado no solo no ayuda — puede ser más lento que secuencial. Esta sección te enseña a paralelizar sin errores y a saber exactamente cuándo conviene y cuándo no.</p>
+
+    <!-- ============ MAPA MENTAL ============ -->
+    <h3>🗺️ Las 3 formas de paralelizar en Numba</h3>
+
+    <table>
+      <tr><th>Mecanismo</th><th>Cómo funciona</th><th>Cuándo usar</th><th>Overhead</th></tr>
+      <tr>
+        <td><code>parallel=True</code><br>(auto-parallelización)</td>
+        <td>Numba detecta operaciones con semántica paralela y las fusiona en kernels multi-thread</td>
+        <td>Operaciones sobre arrays completos: <code>np.sin(x) + np.cos(y)</code>, reducciones</td>
+        <td>Bajo (~0.05ms)</td>
+      </tr>
+      <tr>
+        <td><code>prange</code><br>(loops paralelos explícitos)</td>
+        <td>Tú indicas qué loop paralelizar. Numba reparte iteraciones entre threads</td>
+        <td>Loops donde cada iteración es independiente y hace trabajo significativo</td>
+        <td>Bajo (~0.05ms)</td>
+      </tr>
+      <tr>
+        <td><code>nogil=True</code> +<br><code>threading</code> manual</td>
+        <td>Tú manejas los threads de Python. Numba libera el GIL para que ejecuten en paralelo</td>
+        <td>Pipelines complejos, control total de scheduling, combinar Numba con I/O</td>
+        <td>Mínimo (tú controlas)</td>
+      </tr>
+    </table>
+
+    <div class="info">
+      <code>parallel=True</code> y <code>prange</code> usan el <strong>mismo thread pool</strong> interno de Numba. No compiten entre sí — si tienes un <code>prange</code> dentro de una función <code>parallel=True</code>, el <code>prange</code> se ejecuta en paralelo y las operaciones de array de esa función también se paralelizan (pero los loops <code>prange</code> internos se serializan para evitar over-subscription).
+    </div>
+
+    <!-- ============ THREADING LAYERS ============ -->
+    <h3>⚙️ Threading layers: el motor bajo el capó</h3>
+
+    <p>Numba no implementa su propio sistema de threads. Delega a una librería externa, y la elección de cuál usar importa:</p>
+
+    <table>
+      <tr><th>Layer</th><th>Backend</th><th>Fork-safe</th><th>Thread-safe</th><th>Dynamic scheduling</th><th>Instalar</th></tr>
+      <tr><td><strong>tbb</strong></td><td>Intel TBB</td><td>✅</td><td>✅</td><td>✅</td><td><code>conda install tbb</code></td></tr>
+      <tr><td><strong>omp</strong></td><td>OpenMP</td><td>❌ (Linux)</td><td>✅</td><td>❌</td><td>Ya incluido en la mayoría de sistemas</td></tr>
+      <tr><td><strong>workqueue</strong></td><td>Built-in Numba</td><td>✅</td><td>❌</td><td>❌</td><td>Siempre disponible</td></tr>
+    </table>
+
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> config, threading_layer
+
+<span class="cm"># Ver qué layer se seleccionó</span>
+<span class="cm"># (necesitas ejecutar algo parallel primero)</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">_trigger</span>(x):
+    <span class="kw">return</span> x + <span class="num">1</span>
+_trigger(np.array([<span class="num">1.0</span>]))
+
+<span class="fn">print</span>(f<span class="st">"Threading layer: {threading_layer()}"</span>)
+
+<span class="cm"># Forzar un layer específico (ANTES de cualquier compilación parallel)</span>
+<span class="cm"># Opción 1: variable de entorno</span>
+<span class="cm"># $ NUMBA_THREADING_LAYER=tbb python mi_script.py</span>
+
+<span class="cm"># Opción 2: programáticamente (antes de cualquier @njit parallel)</span>
+config.THREADING_LAYER = <span class="st">'tbb'</span>
+
+<span class="cm"># Opción 3: elegir por seguridad</span>
+config.THREADING_LAYER = <span class="st">'safe'</span>        <span class="cm"># fork + thread safe (requiere TBB)</span>
+config.THREADING_LAYER = <span class="st">'threadsafe'</span>  <span class="cm"># solo thread safe</span>
+config.THREADING_LAYER = <span class="st">'forksafe'</span>    <span class="cm"># solo fork safe</span></code></pre>
+
+    <div class="perf">
+      <strong>Recomendación para datos masivos:</strong> Instala TBB (<code>conda install tbb</code>). Es el único backend que soporta <strong>dynamic scheduling</strong> (repartir trabajo dinámicamente cuando hay iteraciones con costo variable). También es el único que es fork-safe Y thread-safe, lo que importa si usas <code>multiprocessing</code> además de Numba.
+    </div>
+
+    <!-- ============ CONTROL DE THREADS ============ -->
+    <h3>🎛️ Controlar el número de threads</h3>
+
+<pre><code><span class="kw">from</span> numba <span class="kw">import</span> (njit, prange, config,
+                    set_num_threads, get_num_threads, get_thread_id)
+
+<span class="cm"># Ver cuántos threads tiene Numba</span>
+<span class="fn">print</span>(f<span class="st">"Threads disponibles: {config.NUMBA_NUM_THREADS}"</span>)
+<span class="fn">print</span>(f<span class="st">"Threads activos:     {get_num_threads()}"</span>)
+
+<span class="cm"># ─── ESCENARIO: 4 procesos Python, 8 cores físicos ───</span>
+<span class="cm"># Sin ajustar: cada proceso usa 8 threads = 32 threads totales = oversubscription</span>
+<span class="cm"># Con ajuste: cada proceso usa 2 threads = 8 threads totales = perfecto</span>
+
+<span class="cm"># Opción A: Variable de entorno (antes de lanzar Python)</span>
+<span class="cm"># $ NUMBA_NUM_THREADS=2 python worker.py</span>
+
+<span class="cm"># Opción B: En runtime (más flexible)</span>
+set_num_threads(<span class="num">2</span>)  <span class="cm"># Ahora parallel usa solo 2 threads</span>
+
+<span class="cm"># Se puede cambiar dinámicamente:</span>
+set_num_threads(<span class="num">8</span>)  <span class="cm"># Volver a usar todos para una tarea pesada</span>
+set_num_threads(<span class="num">2</span>)  <span class="cm"># Reducir de nuevo</span>
+
+<span class="cm"># ¡Funciona DENTRO de funciones @njit también!</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">adaptive_parallel</span>(data, use_all_cores):
+    <span class="kw">if</span> use_all_cores:
+        set_num_threads(config.NUMBA_NUM_THREADS)
+    <span class="kw">else</span>:
+        set_num_threads(<span class="num">2</span>)
+
+    result = np.empty(<span class="fn">len</span>(data))
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="fn">len</span>(data)):
+        result[i] = np.sqrt(data[i])
+    <span class="kw">return</span> result
+
+<span class="cm"># Identificar threads individuales (útil para debugging)</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">show_threads</span>(n):
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n):
+        tid = get_thread_id()  <span class="cm"># 0 a get_num_threads()-1</span>
+        <span class="cm"># No uses print aquí en producción (I/O serializa los threads)</span>
+    <span class="kw">return</span> get_num_threads()</code></pre>
+
+    <div class="warn">
+      <code>set_num_threads(n)</code> solo puede bajar el número, nunca subir más allá de <code>NUMBA_NUM_THREADS</code> (que se fija al importar Numba). Si necesitas un máximo alto, no restrinjas <code>NUMBA_NUM_THREADS</code> con variable de entorno — usa <code>set_num_threads()</code> dinámicamente.
+    </div>
+
+    <!-- ============ PRANGE EN PROFUNDIDAD ============ -->
+    <h3>🔄 prange en profundidad: scheduling y chunking</h3>
+
+    <p>Por defecto, <code>prange</code> usa <strong>static scheduling</strong>: divide las N iteraciones en partes iguales entre los threads. Si cada iteración tarda lo mismo, es perfecto. Si no, algunos threads terminan antes y esperan ociosos.</p>
+
+<pre><code><span class="cm"># ─── PROBLEMA: iteraciones con costo variable ───</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">costo_variable</span>(limits):
+    <span class="cm">"""Cada iteración tiene un costo muy diferente."""</span>
+    results = np.empty(<span class="fn">len</span>(limits))
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="fn">len</span>(limits)):
+        <span class="cm"># Collatz: el costo varía enormemente según el número</span>
+        n = limits[i]
+        count = <span class="num">0</span>
+        <span class="kw">while</span> n > <span class="num">1</span>:
+            <span class="kw">if</span> n % <span class="num">2</span> == <span class="num">0</span>:
+                n //= <span class="num">2</span>
+            <span class="kw">else</span>:
+                n = n * <span class="num">3</span> + <span class="num">1</span>
+            count += <span class="num">1</span>
+        results[i] = count
+    <span class="kw">return</span> results
+
+<span class="cm"># Con static scheduling: thread 0 puede terminar en 1ms</span>
+<span class="cm"># mientras thread 3 tarda 50ms → los otros 3 threads esperan 49ms</span>
+
+<span class="cm"># ─── SOLUCIÓN: dynamic scheduling con chunksize ───</span>
+<span class="cm"># Requiere TBB como threading layer</span>
+<span class="kw">from</span> numba <span class="kw">import</span> parallel_chunksize
+
+<span class="cm"># Chunk size pequeño = mejor balanceo de carga, más overhead de scheduling</span>
+<span class="cm"># Chunk size grande = peor balanceo, menos overhead</span>
+<span class="cm"># Regla práctica: chunk_size ≈ n_iteraciones / (n_threads × 10)</span>
+
+limits = np.random.randint(<span class="num">1</span>, <span class="num">1_000_000</span>, size=<span class="num">100_000</span>)
+
+<span class="cm"># Static (default): desbalanceado</span>
+result1 = costo_variable(limits)
+
+<span class="cm"># Dynamic con chunk size optimizado</span>
+<span class="kw">with</span> parallel_chunksize(<span class="num">100</span>):   <span class="cm"># 100K iteraciones / (8 threads × 10) ≈ 1250</span>
+    result2 = costo_variable(limits)  <span class="cm"># pero chunks más pequeños → mejor balance</span>
+
+<span class="cm"># También se puede hacer programáticamente</span>
+<span class="kw">from</span> numba <span class="kw">import</span> set_parallel_chunksize, get_parallel_chunksize
+
+old = set_parallel_chunksize(<span class="num">100</span>)
+result3 = costo_variable(limits)
+set_parallel_chunksize(old)  <span class="cm"># restaurar</span></code></pre>
+
+    <div class="info">
+      <strong>Dynamic scheduling solo funciona con TBB.</strong> Con OpenMP o workqueue, el chunksize se ignora silenciosamente. Verifica: <code>from numba import threading_layer; print(threading_layer())</code> debe mostrar <code>tbb</code>.
+    </div>
+
+    <!-- ============ NESTED PARALLELISM ============ -->
+    <h3>🪆 Paralelismo anidado: las reglas que nadie te dice</h3>
+
+<pre><code><span class="cm"># REGLA CRÍTICA: Numba NO soporta prange anidados en paralelo.</span>
+<span class="cm"># El loop externo se ejecuta en paralelo, el interno se SERIALIZA.</span>
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">nested_prange</span>(matrix):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(matrix.shape[<span class="num">0</span>]):        <span class="cm"># ✅ PARALELO</span>
+        <span class="kw">for</span> j <span class="kw">in</span> prange(matrix.shape[<span class="num">1</span>]):    <span class="cm"># ❌ SERIALIZADO (tratado como range)</span>
+            total += matrix[i, j]
+    <span class="kw">return</span> total
+
+<span class="cm"># ¿Cómo saber cuál se paralelizó? → parallel_diagnostics</span>
+<span class="cm"># Mostrará algo como:</span>
+<span class="cm"># +--3 (parallel)          ← loop externo</span>
+<span class="cm">#    +--2 (serial)         ← loop interno serializado</span>
+
+<span class="cm"># ─── CONSECUENCIA PRÁCTICA ───</span>
+<span class="cm"># Si tienes un loop externo de 4 iteraciones y uno interno de 1000,</span>
+<span class="cm"># solo el de 4 se paraleliza → ¡solo 4 threads trabajan!</span>
+
+<span class="cm"># ❌ MAL: pocas iteraciones en el loop paralelo</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">mal_anidado</span>(data_3d):  <span class="cm"># shape: (4, 1000, 1000)</span>
+    result = np.zeros(data_3d.shape[<span class="num">0</span>])
+    <span class="kw">for</span> c <span class="kw">in</span> prange(<span class="num">4</span>):              <span class="cm"># Solo 4 iteraciones paralelas</span>
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1000</span>):         <span class="cm"># 1000 iteraciones seriales</span>
+            <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1000</span>):     <span class="cm"># 1000 iteraciones seriales</span>
+                result[c] += data_3d[c, i, j]
+    <span class="kw">return</span> result
+
+<span class="cm"># ✅ BIEN: aplanar para maximizar iteraciones paralelas</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">bien_aplanado</span>(data_3d):  <span class="cm"># shape: (4, 1000, 1000)</span>
+    C, H, W = data_3d.shape
+    flat_size = C * H           <span class="cm"># = 4000 iteraciones paralelas</span>
+    result = np.zeros(C)
+    <span class="kw">for</span> idx <span class="kw">in</span> prange(flat_size):
+        c = idx // H
+        i = idx % H
+        row_sum = <span class="num">0.0</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(W):
+            row_sum += data_3d[c, i, j]
+        result[c] += row_sum    <span class="cm"># ¡Cuidado! Esto es una reducción en result[c]</span>
+    <span class="kw">return</span> result</code></pre>
+
+    <!-- ============ NOGIL + THREADING ============ -->
+    <h3>🔓 nogil + threading manual: control total</h3>
+
+    <p><code>prange</code> es conveniente pero limitado: un solo patrón de loop paralelo, sin control de scheduling, sin poder mezclar con I/O. Para pipelines complejos, necesitas <code>nogil=True</code> con threading de Python.</p>
+
+<pre><code><span class="kw">import</span> threading
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit
+
+<span class="cm"># ─── PATRÓN 1: Divide & Conquer manual ───</span>
+<span class="cm"># Útil cuando necesitas control total de qué chunk va a qué thread</span>
+
+<span class="dec">@njit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process_chunk</span>(data, result, start, end):
+    <span class="cm">"""Procesa un rango [start, end) del array.
+    nogil=True permite que múltiples threads ejecuten esto simultáneamente."""</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(start, end):
+        <span class="cm"># Operación costosa por elemento</span>
+        val = data[i]
+        <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(<span class="num">100</span>):   <span class="cm"># simular trabajo pesado</span>
+            val = np.sin(val) * np.cos(val) + <span class="num">0.001</span>
+        result[i] = val
+
+<span class="kw">def</span> <span class="fn">parallel_process</span>(data, n_threads=<span class="num">None</span>):
+    <span class="cm">"""Procesa data en paralelo con n_threads threads."""</span>
+    <span class="kw">import</span> os
+    <span class="kw">if</span> n_threads <span class="kw">is</span> <span class="num">None</span>:
+        n_threads = os.cpu_count()
+
+    n = <span class="fn">len</span>(data)
+    result = np.empty_like(data)
+    chunk_size = (n + n_threads - <span class="num">1</span>) // n_threads  <span class="cm"># ceil division</span>
+
+    threads = []
+    <span class="kw">for</span> t <span class="kw">in</span> <span class="fn">range</span>(n_threads):
+        start = t * chunk_size
+        end = <span class="fn">min</span>(start + chunk_size, n)
+        <span class="kw">if</span> start >= n:
+            <span class="kw">break</span>
+        thread = threading.Thread(
+            target=process_chunk,
+            args=(data, result, start, end)
+        )
+        threads.append(thread)
+        thread.start()
+
+    <span class="kw">for</span> t <span class="kw">in</span> threads:
+        t.join()
+
+    <span class="kw">return</span> result
+
+data = np.random.rand(<span class="num">1_000_000</span>)
+result = parallel_process(data, n_threads=<span class="num">8</span>)</code></pre>
+
+    <h4>Patrón 2: Pipeline productor-consumidor</h4>
+<pre><code><span class="kw">import</span> threading
+<span class="kw">from</span> queue <span class="kw">import</span> Queue
+
+<span class="dec">@njit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">heavy_transform</span>(chunk, output):
+    <span class="cm">"""Transformación pesada sobre un chunk de datos."""</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(chunk)):
+        val = chunk[i]
+        <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(<span class="num">50</span>):
+            val = np.sqrt(np.abs(val) + <span class="num">1.0</span>)
+        output[i] = val
+
+<span class="kw">def</span> <span class="fn">pipeline_process</span>(data, chunk_size=<span class="num">100_000</span>, n_workers=<span class="num">4</span>):
+    <span class="cm">"""Pipeline: un thread carga chunks, varios workers los procesan.
+    Ideal cuando combinas I/O con cómputo pesado."""</span>
+
+    n = <span class="fn">len</span>(data)
+    result = np.empty_like(data)
+    task_queue = Queue(maxsize=n_workers * <span class="num">2</span>)  <span class="cm"># buffer limitado</span>
+    done_event = threading.Event()
+
+    <span class="kw">def</span> <span class="fn">worker</span>():
+        <span class="kw">while not</span> done_event.is_set() <span class="kw">or not</span> task_queue.empty():
+            <span class="kw">try</span>:
+                start, end = task_queue.get(timeout=<span class="num">0.1</span>)
+            <span class="kw">except</span>:
+                <span class="kw">continue</span>
+            <span class="cm"># heavy_transform tiene nogil=True</span>
+            <span class="cm"># → se ejecuta sin GIL → verdadero paralelismo</span>
+            heavy_transform(data[start:end], result[start:end])
+            task_queue.task_done()
+
+    <span class="cm"># Lanzar workers</span>
+    workers = []
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(n_workers):
+        t = threading.Thread(target=worker, daemon=<span class="num">True</span>)
+        t.start()
+        workers.append(t)
+
+    <span class="cm"># Producir tareas (podría ser lectura de disco aquí)</span>
+    <span class="kw">for</span> start <span class="kw">in</span> <span class="fn">range</span>(<span class="num">0</span>, n, chunk_size):
+        end = <span class="fn">min</span>(start + chunk_size, n)
+        task_queue.put((start, end))
+
+    task_queue.join()   <span class="cm"># Esperar que todos los chunks se procesen</span>
+    done_event.set()    <span class="cm"># Señalar a workers que terminen</span>
+    <span class="kw">for</span> t <span class="kw">in</span> workers:
+        t.join()
+
+    <span class="kw">return</span> result</code></pre>
+
+    <h4>Patrón 3: concurrent.futures (la forma más limpia)</h4>
+<pre><code><span class="kw">from</span> concurrent.futures <span class="kw">import</span> ThreadPoolExecutor
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit
+
+<span class="dec">@njit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">compute_stats</span>(chunk):
+    <span class="cm">"""Calcula media y varianza de un chunk (nogil para paralelismo real)."""</span>
+    n = <span class="fn">len</span>(chunk)
+    mean = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        mean += chunk[i]
+    mean /= n
+
+    var = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        diff = chunk[i] - mean
+        var += diff * diff
+    var /= (n - <span class="num">1</span>)
+
+    <span class="kw">return</span> mean, var
+
+<span class="kw">def</span> <span class="fn">parallel_stats_pipeline</span>(data, n_chunks=<span class="num">16</span>, n_workers=<span class="num">8</span>):
+    <span class="cm">"""Calcula estadísticas globales procesando chunks en paralelo."""</span>
+    chunk_size = (<span class="fn">len</span>(data) + n_chunks - <span class="num">1</span>) // n_chunks
+    chunks = [data[i*chunk_size : (i+<span class="num">1</span>)*chunk_size] <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n_chunks)]
+
+    <span class="cm"># ThreadPoolExecutor + nogil = paralelismo real en Python</span>
+    <span class="kw">with</span> ThreadPoolExecutor(max_workers=n_workers) <span class="kw">as</span> pool:
+        futures = [pool.submit(compute_stats, chunk) <span class="kw">for</span> chunk <span class="kw">in</span> chunks]
+        results = [f.result() <span class="kw">for</span> f <span class="kw">in</span> futures]
+
+    <span class="cm"># Combinar resultados parciales</span>
+    total_mean = np.mean([r[<span class="num">0</span>] <span class="kw">for</span> r <span class="kw">in</span> results])
+    <span class="kw">return</span> total_mean
+
+data = np.random.randn(<span class="num">100_000_000</span>)  <span class="cm"># 800MB</span>
+result = parallel_stats_pipeline(data)</code></pre>
+
+    <!-- ============ PRANGE vs NOGIL vs PARALLEL ============ -->
+    <h3>⚔️ ¿prange vs nogil+threading vs parallel=True? Cuándo usar cada uno</h3>
+
+<pre><code><span class="cm"># ─── ESCENARIO 1: Operaciones vectoriales sobre arrays grandes ───</span>
+<span class="cm"># → parallel=True (auto-detección + fusión de kernels)</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">vector_ops</span>(x, y):
+    <span class="cm"># Numba fusiona todo esto en UN SOLO kernel paralelo</span>
+    a = np.sin(x) ** <span class="num">2</span>
+    b = np.cos(y) ** <span class="num">2</span>
+    <span class="kw">return</span> a + b
+<span class="cm"># ✅ parallel=True es ideal: detecta las operaciones, las fusiona,</span>
+<span class="cm">#    y las reparte entre threads automáticamente</span>
+<span class="cm"># ❌ prange sería innecesariamente verboso para esto</span>
+
+<span class="cm"># ─── ESCENARIO 2: Loop con lógica compleja por iteración ───</span>
+<span class="cm"># → prange (tú controlas el loop explícitamente)</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">complex_per_row</span>(matrix):
+    n = matrix.shape[<span class="num">0</span>]
+    result = np.empty(n)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n):
+        <span class="cm"># Lógica compleja que parallel=True no puede auto-detectar</span>
+        row = matrix[i, :]
+        sorted_indices = np.argsort(row)  <span class="cm"># no es paralelizable automáticamente</span>
+        median_idx = sorted_indices[<span class="fn">len</span>(row) // <span class="num">2</span>]
+        result[i] = row[median_idx]
+    <span class="kw">return</span> result
+<span class="cm"># ✅ prange es ideal: cada fila es independiente pero la lógica es compleja</span>
+<span class="cm"># ❌ parallel=True no podría auto-detectar el paralelismo aquí</span>
+
+<span class="cm"># ─── ESCENARIO 3: Pipeline I/O + cómputo ───</span>
+<span class="cm"># → nogil + threading (control total, mezclar I/O con cómputo)</span>
+<span class="dec">@njit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">transform_chunk</span>(chunk, output):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(chunk)):
+        output[i] = np.sqrt(chunk[i]) * np.log(chunk[i] + <span class="num">1</span>)
+
+<span class="kw">def</span> <span class="fn">io_pipeline</span>(filenames):
+    <span class="cm">"""Lee archivos mientras procesa los anteriores.
+    prange NO puede hacer esto: necesitas solapar I/O con cómputo."""</span>
+    <span class="kw">with</span> ThreadPoolExecutor(max_workers=<span class="num">6</span>) <span class="kw">as</span> pool:
+        futures = []
+        <span class="kw">for</span> fname <span class="kw">in</span> filenames:
+            data = np.load(fname)               <span class="cm"># I/O (con GIL, pero no bloquea Numba)</span>
+            output = np.empty_like(data)
+            fut = pool.submit(transform_chunk, data, output)  <span class="cm"># Cómputo sin GIL</span>
+            futures.append((fname, fut, output))
+        <span class="cm"># Mientras un thread procesa, otro puede estar leyendo el siguiente archivo</span>
+        <span class="kw">return</span> [(fn, out) <span class="kw">for</span> fn, fut, out <span class="kw">in</span> futures <span class="kw">if</span> fut.result() <span class="kw">is</span> <span class="num">None</span> <span class="kw">or</span> <span class="num">True</span>]
+<span class="cm"># ✅ nogil+threading es ideal: solapas I/O con cómputo</span>
+<span class="cm"># ❌ prange no puede mezclar I/O con cómputo</span>
+
+<span class="cm"># ─── ESCENARIO 4: Múltiples funciones independientes ───</span>
+<span class="cm"># → nogil + threading (ejecutar funciones DIFERENTES en paralelo)</span>
+<span class="dec">@njit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">task_a</span>(data, output):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        output[i] = np.sin(data[i])
+
+<span class="dec">@njit</span>(nogil=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">task_b</span>(data, output):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        output[i] = np.cos(data[i])
+
+<span class="kw">def</span> <span class="fn">run_tasks_parallel</span>(data_a, data_b):
+    out_a = np.empty_like(data_a)
+    out_b = np.empty_like(data_b)
+    t1 = threading.Thread(target=task_a, args=(data_a, out_a))
+    t2 = threading.Thread(target=task_b, args=(data_b, out_b))
+    t1.start(); t2.start()
+    t1.join();  t2.join()
+    <span class="kw">return</span> out_a, out_b
+<span class="cm"># ✅ Dos funciones DIFERENTES ejecutándose simultáneamente</span>
+<span class="cm"># ❌ prange solo paraleliza iteraciones del MISMO loop</span></code></pre>
+
+    <h3>📊 Tabla de decisión</h3>
+    <table>
+      <tr><th>Situación</th><th>Mecanismo</th><th>Por qué</th></tr>
+      <tr><td>Operaciones NumPy sobre arrays grandes</td><td><code>parallel=True</code></td><td>Auto-detecta y fusiona</td></tr>
+      <tr><td>Loop con iteraciones independientes</td><td><code>prange</code></td><td>Explícito, simple, eficiente</td></tr>
+      <tr><td>Iteraciones con costo muy variable</td><td><code>prange</code> + <code>parallel_chunksize</code> + TBB</td><td>Dynamic scheduling evita desbalance</td></tr>
+      <tr><td>Pipeline I/O + cómputo</td><td><code>nogil</code> + <code>ThreadPoolExecutor</code></td><td>Solapa I/O con cómputo</td></tr>
+      <tr><td>Funciones diferentes en paralelo</td><td><code>nogil</code> + <code>threading</code></td><td>prange solo paraleliza un loop</td></tr>
+      <tr><td>Múltiples procesos Python + Numba</td><td><code>set_num_threads</code></td><td>Evitar oversubscription</td></tr>
+      <tr><td>Dataset &gt; RAM</td><td><code>nogil</code> + pipeline de chunks</td><td>Procesar en streaming sin cargar todo</td></tr>
+    </table>
+
+    <!-- ============ OVERSUBSCRIPTION ============ -->
+    <h3>💥 Oversubscription: el enemigo silencioso</h3>
+
+    <p>Oversubscription ocurre cuando lanzas más threads que cores físicos. Los threads compiten por CPU, el OS hace context switches constantemente, y la cache se invalida en cada switch. El resultado: <strong>más threads = más lento</strong>.</p>
+
+<pre><code><span class="kw">import</span> os
+<span class="kw">from</span> numba <span class="kw">import</span> config, set_num_threads
+
+<span class="cm"># ─── DETECTAR oversubscription ───</span>
+physical_cores = os.cpu_count()  <span class="cm"># ojo: incluye hyperthreading</span>
+<span class="cm"># En un i7-12700 con 12 cores / 20 threads:</span>
+<span class="cm"># os.cpu_count() = 20 (incluye HT)</span>
+<span class="cm"># Numba usará 20 threads por defecto → subóptimo para cómputo puro</span>
+
+<span class="cm"># Para cómputo numérico puro, usa cores FÍSICOS, no lógicos</span>
+<span class="cm"># Hyperthreading NO ayuda con código numérico intensivo</span>
+<span class="cm"># (dos threads en el mismo core comparten las unidades de cómputo)</span>
+
+<span class="cm"># ─── PREVENIR oversubscription ───</span>
+
+<span class="cm"># Caso 1: Script single-process</span>
+<span class="cm"># Regla: threads = cores físicos (no lógicos)</span>
+set_num_threads(physical_cores // <span class="num">2</span>)  <span class="cm"># Aprox cores físicos si HT está activo</span>
+
+<span class="cm"># Caso 2: Múltiples procesos (ej: 4 workers)</span>
+n_workers = <span class="num">4</span>
+threads_per_worker = max(<span class="num">1</span>, physical_cores // (<span class="num">2</span> * n_workers))
+set_num_threads(threads_per_worker)
+
+<span class="cm"># Caso 3: Numba + otra librería paralela (NumPy con MKL, scikit-learn, etc.)</span>
+<span class="cm"># ¡MKL y Numba AMBOS lanzan threads! Si no coordinan → oversubscription</span>
+<span class="cm"># Solución: limitar threads de ambos</span>
+os.environ[<span class="st">'MKL_NUM_THREADS'</span>] = <span class="st">'4'</span>          <span class="cm"># Limitar MKL</span>
+os.environ[<span class="st">'OMP_NUM_THREADS'</span>] = <span class="st">'4'</span>          <span class="cm"># Limitar OpenMP</span>
+os.environ[<span class="st">'NUMBA_NUM_THREADS'</span>] = <span class="st">'4'</span>        <span class="cm"># Limitar Numba</span>
+<span class="cm"># IMPORTANTE: estas env vars deben setearse ANTES de importar las librerías</span></code></pre>
+
+    <!-- ============ CASO REAL: CHUNK-PROCESS-COMBINE ============ -->
+    <h3>🏭 Caso real completo: Chunk-Process-Combine para datasets gigantes</h3>
+
+    <p>El patrón definitivo para procesar datos que no caben en cache (o incluso en RAM). Es la base de cómo funcionan internamente Spark, Dask, y Polars.</p>
+
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit, prange, set_num_threads, config
+<span class="kw">import</span> time
+
+<span class="cm"># ─── PASO 1: Función de procesamiento por chunk (cache-friendly) ───</span>
+<span class="dec">@njit</span>(fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process_single_chunk</span>(chunk):
+    <span class="cm">"""Procesa un chunk que cabe en cache L2/L3.
+    Retorna estadísticas parciales: (sum, sum_sq, min, max, count)"""</span>
+    n = <span class="fn">len</span>(chunk)
+    total = <span class="num">0.0</span>
+    total_sq = <span class="num">0.0</span>
+    vmin = chunk[<span class="num">0</span>]
+    vmax = chunk[<span class="num">0</span>]
+
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        val = chunk[i]
+        <span class="cm"># Todas las operaciones en un solo pass → datos en cache</span>
+        total += val
+        total_sq += val * val
+        <span class="kw">if</span> val < vmin:
+            vmin = val
+        <span class="kw">if</span> val > vmax:
+            vmax = val
+
+    <span class="kw">return</span> total, total_sq, vmin, vmax, n
+
+<span class="cm"># ─── PASO 2: Paralelizar sobre chunks ───</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process_all_chunks</span>(data, chunk_size):
+    <span class="cm">"""Divide data en chunks y los procesa en paralelo."""</span>
+    n = <span class="fn">len</span>(data)
+    n_chunks = (n + chunk_size - <span class="num">1</span>) // chunk_size
+
+    <span class="cm"># Arrays para resultados parciales (un resultado por chunk)</span>
+    sums     = np.empty(n_chunks)
+    sums_sq  = np.empty(n_chunks)
+    mins     = np.empty(n_chunks)
+    maxs     = np.empty(n_chunks)
+    counts   = np.empty(n_chunks, dtype=np.int64)
+
+    <span class="kw">for</span> c <span class="kw">in</span> prange(n_chunks):
+        start = c * chunk_size
+        end = <span class="fn">min</span>(start + chunk_size, n)
+        chunk = data[start:end]
+
+        s, sq, mn, mx, cnt = process_single_chunk(chunk)
+        sums[c] = s
+        sums_sq[c] = sq
+        mins[c] = mn
+        maxs[c] = mx
+        counts[c] = cnt
+
+    <span class="kw">return</span> sums, sums_sq, mins, maxs, counts
+
+<span class="cm"># ─── PASO 3: Combinar resultados parciales ───</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">combine_results</span>(sums, sums_sq, mins, maxs, counts):
+    <span class="cm">"""Combina estadísticas parciales en resultado global."""</span>
+    total_count = np.sum(counts)
+    total_sum = np.sum(sums)
+    total_sum_sq = np.sum(sums_sq)
+
+    mean = total_sum / total_count
+    variance = (total_sum_sq / total_count) - mean * mean
+    global_min = mins[<span class="num">0</span>]
+    global_max = maxs[<span class="num">0</span>]
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1</span>, <span class="fn">len</span>(mins)):
+        <span class="kw">if</span> mins[i] < global_min:
+            global_min = mins[i]
+        <span class="kw">if</span> maxs[i] > global_max:
+            global_max = maxs[i]
+
+    <span class="kw">return</span> mean, np.sqrt(variance), global_min, global_max, total_count
+
+<span class="cm"># ─── ORQUESTADOR ───</span>
+<span class="kw">def</span> <span class="fn">massive_stats</span>(data, chunk_size=<span class="num">131072</span>):
+    <span class="cm">"""chunk_size=131072 float64 = 1MB → cabe cómodamente en L2/L3"""</span>
+    sums, sums_sq, mins, maxs, counts = process_all_chunks(data, chunk_size)
+    <span class="kw">return</span> combine_results(sums, sums_sq, mins, maxs, counts)
+
+<span class="cm"># ─── BENCHMARK ───</span>
+data = np.random.randn(<span class="num">100_000_000</span>)  <span class="cm"># 800MB de datos</span>
+
+<span class="cm"># Warmup</span>
+massive_stats(data)
+
+start = time.perf_counter()
+mean, std, vmin, vmax, count = massive_stats(data)
+elapsed = time.perf_counter() - start
+
+<span class="fn">print</span>(f<span class="st">"100M elementos en {elapsed*1000:.1f}ms"</span>)
+<span class="fn">print</span>(f<span class="st">"Throughput: {data.nbytes / elapsed / 1e9:.1f} GB/s"</span>)
+<span class="fn">print</span>(f<span class="st">"Mean={mean:.6f}, Std={std:.6f}, Min={vmin:.4f}, Max={vmax:.4f}"</span>)</code></pre>
+
+    <div class="perf">
+      Este patrón Chunk-Process-Combine combina todo lo aprendido: acceso contiguo (cada chunk es contiguo), cache-friendly (chunks caben en L2), sin temporales (todo en un solo pass), paralelo (chunks en prange), y fastmath. Es el patrón que escala desde kilobytes hasta terabytes.
+    </div>
+
+    <!-- ============ CHECKLIST ============ -->
+    <h3>📋 Checklist de paralelismo</h3>
+    <table>
+      <tr><th>#</th><th>Verificar</th><th>Si no lo haces...</th></tr>
+      <tr><td>1</td><td>¿Suficientes iteraciones en el prange externo?</td><td>Pocos threads trabajan, los demás esperan</td></tr>
+      <tr><td>2</td><td>¿Cada iteración es independiente (sin escrituras compartidas)?</td><td>Race conditions, resultados corruptos</td></tr>
+      <tr><td>3</td><td>¿El threading layer es apropiado?</td><td>fork+thread safety, dynamic scheduling no disponible</td></tr>
+      <tr><td>4</td><td>¿Coordiné threads con otras librerías (MKL, OpenMP)?</td><td>Oversubscription, peor rendimiento</td></tr>
+      <tr><td>5</td><td>¿Probé con scaling test (1K → 10M)?</td><td>Overhead de threading domina con datos pequeños</td></tr>
+      <tr><td>6</td><td>¿Uso <code>parallel_diagnostics()</code> para verificar?</td><td>Numba puede haber serializado tu loop sin avisar</td></tr>
+      <tr><td>7</td><td>¿Chunks de prange caben en cache L2/L3?</td><td>Cache thrashing entre threads, peor que secuencial</td></tr>
+      <tr><td>8</td><td>¿Iteraciones de costo variable? → chunksize dinámico</td><td>Threads rápidos esperan a los lentos</td></tr>
+      <tr><td>9</td><td>¿Necesito mezclar I/O + cómputo?</td><td>prange no puede, usa nogil + threading</td></tr>
+    </table>
+
+  </div>
+</div>
         
 <!--
   ============================================================
   MÓDULO EXTRA: Guía Exhaustiva de Decoradores
   ============================================================
-  INSTRUCCIONES: Copia todo este bloque y pégalo en tu guía
-  JUSTO ANTES de la línea:
-      <!-- ==================== MÓDULO 10 ==================== -->
-      <a href="#m-decorators">★ Guía Exhaustiva: ¿Qué decorador uso?</a>
+<!-- ==================== MÓDULO 10 ==================== -->
+<a href="#m-decorators">★ Guía Exhaustiva: ¿Qué decorador uso?</a>
 
 <!-- ==================== MÓDULO DECORADORES ==================== -->
 <div class="module" id="m-decorators">
