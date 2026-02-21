@@ -3266,7 +3266,629 @@ raw_data[outlier_mask] *= <span class="num">100</span>
   </div>
 </div>
 
-        
+<a href="#m-antipatterns">☠️ Anti-Patterns a Escala: Trampas que Cuestan Horas</a>
+<!--
+  ============================================================
+  MÓDULO: Anti-Patterns a Escala — Las Trampas que Cuestan Horas ☠️
+  ============================================================
+-->
+
+<!-- ==================== MÓDULO ANTI-PATTERNS ==================== -->
+<div class="module" id="m-antipatterns">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">☠️</span> Anti-Patterns a Escala: Las Trampas Invisibles que Cuestan Horas</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <p>Todo lo anterior te enseñó a hacer las cosas bien. Esta sección es diferente — te enseña a <strong>no destruirte a ti mismo</strong>. Cada anti-pattern aquí parece razonable, pasa los tests, y funciona con datos pequeños. Pero a escala masiva, cada uno es una bomba de tiempo que convierte minutos en horas y horas en días. Los he ordenado del más común al más sutil.</p>
+
+    <!-- ============ ANTI-PATTERN 1 ============ -->
+    <h3 style="color: #f85149;">☠️ #1 — Llamar una función parallel=True dentro de un loop</h3>
+    <p><strong>Severidad: CATASTRÓFICA</strong> | <strong>Frecuencia: MUY ALTA</strong></p>
+
+    <p>Este es el anti-pattern más devastador y más común. Parece completamente inocente:</p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: parallel=True DENTRO de un loop Python que itera millones de veces</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process_single_row</span>(row):
+    <span class="cm">"""Procesa UNA fila con parallel=True."""</span>
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="fn">len</span>(row)):
+        total += np.sqrt(row[i]) * np.sin(row[i])
+    <span class="kw">return</span> total
+
+<span class="cm"># La llamada "inocente":</span>
+data = np.random.rand(<span class="num">1_000_000</span>, <span class="num">50</span>)  <span class="cm"># 1M filas, 50 columnas</span>
+results = np.empty(data.shape[<span class="num">0</span>])
+
+<span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(data.shape[<span class="num">0</span>]):          <span class="cm"># 1 MILLÓN de iteraciones</span>
+    results[i] = process_single_row(data[i])  <span class="cm"># ☠️ cada llamada: dispatch + thread sync</span>
+
+<span class="cm"># Tiempo: ~180 segundos</span>
+<span class="cm"># POR QUÉ: Cada llamada a process_single_row():</span>
+<span class="cm">#   1. Python → Numba dispatch: ~1μs (boxing/unboxing de argumentos)</span>
+<span class="cm">#   2. Thread pool wake up: ~5-20μs (despertar N threads dormidos)</span>
+<span class="cm">#   3. Work distribution: ~2μs (repartir 50 elementos entre 8 threads)</span>
+<span class="cm">#   4. Thread sync barrier: ~5-10μs (esperar que todos terminen)</span>
+<span class="cm">#   5. Cómputo real: ~0.1μs (50 sqrt+sin es NADA)</span>
+<span class="cm"># Total overhead por llamada: ~30μs × 1M llamadas = 30 SEGUNDOS de puro overhead</span>
+<span class="cm"># El cómputo real total es ~0.1 segundos</span></code></pre>
+
+    <h4>✅ Solución: mover el loop DENTRO de la función paralela</h4>
+<pre><code><span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process_all_rows</span>(data):
+    <span class="cm">"""El loop sobre filas está DENTRO — UN solo dispatch, UN solo thread sync."""</span>
+    n_rows, n_cols = data.shape
+    results = np.empty(n_rows)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n_rows):   <span class="cm"># 1M iteraciones paralelas</span>
+        total = <span class="num">0.0</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(n_cols):
+            total += np.sqrt(data[i, j]) * np.sin(data[i, j])
+        results[i] = total
+    <span class="kw">return</span> results
+
+results = process_all_rows(data)
+<span class="cm"># Tiempo: ~0.3 segundos — 600x más rápido</span>
+<span class="cm"># UN dispatch + 1M iteraciones de prange = overhead despreciable</span></code></pre>
+
+    <div class="warn">
+      <strong>Regla de hierro:</strong> Nunca llames una función <code>parallel=True</code> o <code>@njit</code> en un loop Python que itera más de ~1000 veces. El overhead del dispatch Python→Numba (~1μs) × N llamadas te destruye. Siempre mueve el loop DENTRO de la función Numba.
+    </div>
+
+    <!-- ============ ANTI-PATTERN 2 ============ -->
+    <h3 style="color: #f85149;">☠️ #2 — Alocaciones dentro del loop caliente</h3>
+    <p><strong>Severidad: ALTA</strong> | <strong>Frecuencia: MUY ALTA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: np.empty/np.zeros dentro de un loop que itera mucho</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">process_with_temp_bad</span>(data, n_iter):
+    n = data.shape[<span class="num">0</span>]
+    result = np.zeros(n)
+    <span class="kw">for</span> iteration <span class="kw">in</span> <span class="fn">range</span>(n_iter):
+        temp = np.empty(n)             <span class="cm"># ☠️ ALOCACIÓN: syscall al OS</span>
+        temp2 = np.zeros(n)            <span class="cm"># ☠️ ALOCACIÓN + memset a 0</span>
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+            temp[i] = np.sin(data[i]) * iteration
+            temp2[i] = temp[i] ** <span class="num">2</span>
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+            result[i] += temp2[i]
+    <span class="kw">return</span> result
+
+<span class="cm"># Con n=100_000, n_iter=1000:</span>
+<span class="cm"># Tiempo: ~4.8 segundos</span>
+<span class="cm"># 1000 iteraciones × 2 alocaciones × 100K × 8 bytes = 1.6 GB total de alocación</span>
+<span class="cm"># Cada np.empty llama a NRT_MemInfo_alloc → malloc → puede causar page fault</span>
+<span class="cm"># Cada np.zeros además hace memset (llena de ceros 800KB)</span>
+
+<span class="cm"># ✅ CORRECTO: pre-alocar fuera del loop, reutilizar</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">process_with_temp_good</span>(data, n_iter):
+    n = data.shape[<span class="num">0</span>]
+    result = np.zeros(n)
+    temp = np.empty(n)        <span class="cm"># ✅ UNA vez</span>
+    temp2 = np.empty(n)       <span class="cm"># ✅ UNA vez (ni siquiera necesita zeros)</span>
+    <span class="kw">for</span> iteration <span class="kw">in</span> <span class="fn">range</span>(n_iter):
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+            temp[i] = np.sin(data[i]) * iteration
+            temp2[i] = temp[i] ** <span class="num">2</span>
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+            result[i] += temp2[i]
+    <span class="kw">return</span> result
+
+<span class="cm"># Tiempo: ~1.2 segundos — 4x más rápido</span>
+
+<span class="cm"># ⚡ AÚN MEJOR: eliminar temporales completamente fusionando loops</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">process_fused</span>(data, n_iter):
+    n = data.shape[<span class="num">0</span>]
+    result = np.zeros(n)
+    <span class="kw">for</span> iteration <span class="kw">in</span> <span class="fn">range</span>(n_iter):
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+            val = np.sin(data[i]) * iteration  <span class="cm"># en registro, no en array</span>
+            result[i] += val * val              <span class="cm"># directo, sin temporal</span>
+    <span class="kw">return</span> result
+
+<span class="cm"># Tiempo: ~0.8 segundos — 6x vs original</span></code></pre>
+
+    <!-- ============ ANTI-PATTERN 3 ============ -->
+    <h3 style="color: #f85149;">☠️ #3 — parallel=True silenciosamente no hizo nada</h3>
+    <p><strong>Severidad: ALTA</strong> | <strong>Frecuencia: ALTA</strong></p>
+
+    <p>Este es el más traicionero: tu código compila, ejecuta, produce resultados correctos... pero <code>parallel=True</code> no paralelizó absolutamente nada. Usas 1 core de 8 sin saberlo.</p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA 3A: usar range() en vez de prange()</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">trap_range</span>(data):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):    <span class="cm"># ☠️ range, NO prange → secuencial</span>
+        total += data[i] ** <span class="num">2</span>
+    <span class="kw">return</span> total
+<span class="cm"># parallel=True está activado pero NO se usa</span>
+<span class="cm"># Numba NO da error, NO da warning (en la mayoría de los casos)</span>
+
+<span class="cm"># ☠️ TRAMPA 3B: dependencia entre iteraciones que impide paralelizar</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">trap_dependency</span>(data):
+    result = np.empty(<span class="fn">len</span>(data))
+    result[<span class="num">0</span>] = data[<span class="num">0</span>]
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="num">1</span>, <span class="fn">len</span>(data)):
+        result[i] = result[i-<span class="num">1</span>] + data[i]  <span class="cm"># ☠️ depende del valor anterior</span>
+    <span class="kw">return</span> result
+<span class="cm"># Numba PUEDE serializar el prange sin avisarte</span>
+<span class="cm"># El resultado será CORRECTO (ejecuta secuencialmente) pero sin speedup</span>
+
+<span class="cm"># ☠️ TRAMPA 3C: operaciones sobre arrays sin parallel semántico</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">trap_no_parallel_ops</span>(data):
+    <span class="cm"># np.sort NO tiene semántica paralela en Numba</span>
+    sorted_data = np.sort(data)
+    <span class="cm"># np.searchsorted tampoco</span>
+    idx = np.searchsorted(sorted_data, <span class="num">0.5</span>)
+    <span class="kw">return</span> sorted_data, idx
+<span class="cm"># parallel=True no hace nada aquí — estas ops no se paralelizan</span>
+
+<span class="cm"># ☠️ TRAMPA 3D: prange en el loop INTERNO (se serializa)</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">trap_inner_prange</span>(matrix):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(matrix.shape[<span class="num">0</span>]):         <span class="cm"># ✅ paralelo</span>
+        <span class="kw">for</span> j <span class="kw">in</span> prange(matrix.shape[<span class="num">1</span>]):     <span class="cm"># ☠️ SERIALIZADO silenciosamente</span>
+            total += matrix[i, j]
+    <span class="kw">return</span> total
+<span class="cm"># Si tienes 4 filas y 10,000 columnas → solo 4 threads trabajan</span></code></pre>
+
+    <h4>✅ SIEMPRE verificar con parallel_diagnostics()</h4>
+<pre><code><span class="cm"># Después de CADA función parallel=True que escribas, haz esto:</span>
+trap_range(np.random.rand(<span class="num">100</span>))
+trap_range.parallel_diagnostics(level=<span class="num">1</span>)
+<span class="cm"># Si NO ves loops marcados como "parallel" → no se paralelizó NADA</span>
+<span class="cm"># Si ves "(serial)" donde esperabas "(parallel)" → Numba lo serializó</span>
+
+<span class="cm"># Automatizar la verificación:</span>
+<span class="kw">def</span> <span class="fn">verify_parallel</span>(func, *args):
+    <span class="cm">"""Verifica que una función parallel=True realmente paraleliza."""</span>
+    <span class="kw">import</span> io, sys
+    func(*args)  <span class="cm"># compilar</span>
+
+    <span class="cm"># Capturar output de parallel_diagnostics</span>
+    old_stdout = sys.stdout
+    sys.stdout = buf = io.StringIO()
+    <span class="kw">try</span>:
+        func.parallel_diagnostics(level=<span class="num">1</span>)
+    <span class="kw">except</span>:
+        <span class="fn">print</span>(<span class="st">"NO PARALLEL"</span>, file=sys.stderr)
+    sys.stdout = old_stdout
+    output = buf.getvalue()
+
+    <span class="kw">if</span> <span class="st">'parallel'</span> <span class="kw">not in</span> output.lower():
+        <span class="fn">print</span>(f<span class="st">"⚠️ {func.py_func.__name__}: parallel=True NO tiene efecto"</span>)
+    <span class="kw">elif</span> <span class="st">'serial'</span> <span class="kw">in</span> output.lower():
+        <span class="fn">print</span>(f<span class="st">"⚠️ {func.py_func.__name__}: algunos loops están serializados"</span>)
+    <span class="kw">else</span>:
+        <span class="fn">print</span>(f<span class="st">"✅ {func.py_func.__name__}: paralización confirmada"</span>)</code></pre>
+
+    <!-- ============ ANTI-PATTERN 4 ============ -->
+    <h3 style="color: #f85149;">☠️ #4 — Race conditions silenciosas en arrays</h3>
+    <p><strong>Severidad: CATASTRÓFICA</strong> | <strong>Frecuencia: MEDIA</strong></p>
+
+    <p>Numba NO detecta race conditions en la mayoría de los casos. Tu código da resultados diferentes cada vez que lo ejecutas, y puedes no notarlo si la diferencia es pequeña.</p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: múltiples threads escriben al MISMO elemento</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">race_histogram</span>(data, n_bins):
+    <span class="cm">"""Histograma con race condition."""</span>
+    bins = np.zeros(n_bins, dtype=np.int64)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="fn">len</span>(data)):
+        bin_idx = <span class="fn">int</span>(data[i] * n_bins)
+        <span class="kw">if</span> bin_idx >= n_bins:
+            bin_idx = n_bins - <span class="num">1</span>
+        bins[bin_idx] += <span class="num">1</span>       <span class="cm"># ☠️ RACE: thread A y B incrementan el mismo bin</span>
+    <span class="kw">return</span> bins
+
+data = np.random.rand(<span class="num">10_000_000</span>)
+<span class="cm"># Ejecutar 10 veces — resultados DIFERENTES cada vez:</span>
+<span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(<span class="num">10</span>):
+    result = race_histogram(data, <span class="num">100</span>)
+    <span class="fn">print</span>(np.sum(result))  <span class="cm"># Debería ser 10_000_000 SIEMPRE</span>
+<span class="cm"># Output: 9_998_374, 9_999_102, 9_997_850, ... ← ¡DATOS CORRUPTOS!</span>
+
+<span class="cm"># ☠️ TRAMPA SUTIL: race en slice de array</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">race_slice</span>(data):
+    n = data.shape[<span class="num">0</span>]
+    result = np.zeros(<span class="num">4</span>)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n):
+        result[:] += data[i]  <span class="cm"># ☠️ RACE: todos los threads escriben a result[:]</span>
+    <span class="kw">return</span> result</code></pre>
+
+    <h4>✅ Solución: histogramas thread-local + reduce</h4>
+<pre><code><span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">safe_histogram</span>(data, n_bins):
+    <span class="cm">"""Histograma sin race condition: cada thread tiene su propio buffer."""</span>
+    n_threads = get_num_threads()
+    n = <span class="fn">len</span>(data)
+
+    <span class="cm"># Cada thread tiene su propia copia</span>
+    local_bins = np.zeros((n_threads, n_bins), dtype=np.int64)
+
+    chunk = (n + n_threads - <span class="num">1</span>) // n_threads
+    <span class="kw">for</span> t <span class="kw">in</span> prange(n_threads):
+        start = t * chunk
+        end = <span class="fn">min</span>(start + chunk, n)
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(start, end):
+            bin_idx = <span class="fn">int</span>(data[i] * n_bins)
+            <span class="kw">if</span> bin_idx >= n_bins:
+                bin_idx = n_bins - <span class="num">1</span>
+            local_bins[t, bin_idx] += <span class="num">1</span>  <span class="cm"># ✅ cada thread su propio array</span>
+
+    <span class="cm"># Reducir</span>
+    bins = np.zeros(n_bins, dtype=np.int64)
+    <span class="kw">for</span> b <span class="kw">in</span> prange(n_bins):
+        <span class="kw">for</span> t <span class="kw">in</span> <span class="fn">range</span>(n_threads):
+            bins[b] += local_bins[t, b]
+
+    <span class="kw">return</span> bins
+<span class="cm"># np.sum(safe_histogram(data, 100)) == 10_000_000 SIEMPRE</span></code></pre>
+
+    <div class="warn">
+      <strong>Nota:</strong> Las reducciones ESCALARES con <code>+=</code> sobre una variable simple SÍ son seguras en prange (Numba las detecta y maneja automáticamente). Las reducciones sobre ARRAYS o slices de arrays NO son seguras — Numba no las detecta.
+    </div>
+
+    <!-- ============ ANTI-PATTERN 5 ============ -->
+    <h3 style="color: #f85149;">☠️ #5 — Recompilación infinita: el asesino silencioso</h3>
+    <p><strong>Severidad: ALTA</strong> | <strong>Frecuencia: MEDIA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: llamar la misma función con TIPOS DIFERENTES</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">flexible_func</span>(x):
+    <span class="kw">return</span> np.sum(x ** <span class="num">2</span>)
+
+<span class="cm"># Cada tipo nuevo = NUEVA COMPILACIÓN (0.1-2 segundos cada una)</span>
+flexible_func(np.array([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]))               <span class="cm"># int64 → compila</span>
+flexible_func(np.array([<span class="num">1.0</span>, <span class="num">2.0</span>]))               <span class="cm"># float64 → compila OTRA VEZ</span>
+flexible_func(np.array([<span class="num">1.0</span>, <span class="num">2.0</span>], dtype=np.float32))  <span class="cm"># float32 → compila OTRA VEZ</span>
+flexible_func(np.array([[<span class="num">1.0</span>, <span class="num">2.0</span>]]))             <span class="cm"># 2D float64 → compila OTRA VEZ</span>
+
+<span class="cm"># En un pipeline real donde los datos llegan como int a veces y float otras,</span>
+<span class="cm"># puedes estar recompilando sin saberlo</span>
+
+<span class="cm"># ☠️ CASO PEOR: generar tipos distintos en un loop</span>
+<span class="kw">for</span> dtype <span class="kw">in</span> [np.int32, np.int64, np.float32, np.float64]:
+    data = np.random.rand(<span class="num">1000</span>).astype(dtype)
+    flexible_func(data)  <span class="cm"># ☠️ 4 compilaciones = ~4 segundos de overhead</span>
+
+<span class="cm"># ✅ SOLUCIÓN: estandarizar tipos ANTES de llamar a Numba</span>
+data_clean = data.astype(np.float64)  <span class="cm"># SIEMPRE float64</span>
+flexible_func(data_clean)              <span class="cm"># Usa la versión ya compilada</span>
+
+<span class="cm"># ✅ SOLUCIÓN alternativa: usar signature explícita</span>
+<span class="dec">@njit</span>(<span class="st">'float64(float64[:])'</span>)
+<span class="kw">def</span> <span class="fn">fixed_func</span>(x):
+    <span class="kw">return</span> np.sum(x ** <span class="num">2</span>)
+<span class="cm"># Ahora si pasas int32, Numba da ERROR en vez de recompilar silenciosamente</span>
+
+<span class="cm"># Verificar cuántas compilaciones tiene tu función:</span>
+<span class="fn">print</span>(f<span class="st">"Especializaciones: {len(flexible_func.signatures)}"</span>)
+<span class="cm"># Si este número crece con el tiempo → tienes un problema</span></code></pre>
+
+    <!-- ============ ANTI-PATTERN 6 ============ -->
+    <h3 style="color: #f85149;">☠️ #6 — Numba donde NumPy ya es óptimo</h3>
+    <p><strong>Severidad: MEDIA</strong> | <strong>Frecuencia: MUY ALTA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: reescribir algo que NumPy ya hace en C/BLAS optimizado</span>
+
+<span class="cm"># Multiplicación de matrices: NumPy llama a BLAS (MKL/OpenBLAS)</span>
+<span class="cm"># que está optimizado por ingenieros de Intel con décadas de trabajo</span>
+A = np.random.rand(<span class="num">1000</span>, <span class="num">1000</span>)
+B = np.random.rand(<span class="num">1000</span>, <span class="num">1000</span>)
+
+<span class="cm"># ❌ Intentar hacer matmul en Numba</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">matmul_numba</span>(A, B):
+    M, K = A.shape
+    K2, N = B.shape
+    C = np.zeros((M, N))
+    <span class="kw">for</span> i <span class="kw">in</span> prange(M):
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(N):
+            <span class="kw">for</span> k <span class="kw">in</span> <span class="fn">range</span>(K):
+                C[i, j] += A[i, k] * B[k, j]
+    <span class="kw">return</span> C
+
+<span class="cm"># Benchmark:</span>
+<span class="cm"># np.dot(A, B):     ~15 ms (BLAS, AVX-512, cache blocking perfecto)</span>
+<span class="cm"># matmul_numba:     ~450 ms (30x MÁS LENTO que NumPy)</span>
+
+<span class="cm"># OTROS CASOS donde NumPy gana:</span>
+<span class="cm"># np.linalg.solve() → LAPACK optimizado</span>
+<span class="cm"># np.fft.fft() → FFTW/MKL optimizado</span>
+<span class="cm"># np.linalg.svd() → LAPACK optimizado</span>
+<span class="cm"># Estas operaciones tienen DÉCADAS de optimización. No las reescribas.</span></code></pre>
+
+    <h4>¿Cuándo Numba SÍ gana a NumPy?</h4>
+<pre><code><span class="cm"># Numba gana cuando:</span>
+<span class="cm"># ✅ Fusionar múltiples operaciones NumPy en un solo loop</span>
+<span class="cm"># ✅ Lógica condicional (if/else) dentro de loops</span>
+<span class="cm"># ✅ Acceso a elementos individuales en loops</span>
+<span class="cm"># ✅ Algoritmos con estado (EMA, filtro Kalman, etc.)</span>
+<span class="cm"># ✅ Operaciones no vectorizables nativamente</span>
+
+<span class="cm"># NumPy gana cuando:</span>
+<span class="cm"># ❌ Álgebra lineal densa (BLAS/LAPACK)</span>
+<span class="cm"># ❌ FFT</span>
+<span class="cm"># ❌ Una sola operación vectorizada sobre un array grande</span>
+<span class="cm"># ❌ Operaciones que NumPy ya ejecuta en C compilado</span></code></pre>
+
+    <!-- ============ ANTI-PATTERN 7 ============ -->
+    <h3 style="color: #f85149;">☠️ #7 — Cache invalidado sin saberlo</h3>
+    <p><strong>Severidad: MEDIA</strong> | <strong>Frecuencia: MEDIA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: cache=True no detecta cambios en funciones importadas</span>
+
+<span class="cm"># archivo: utils.py</span>
+<span class="kw">from</span> numba <span class="kw">import</span> njit
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">helper</span>(x):
+    <span class="kw">return</span> x ** <span class="num">2</span>       <span class="cm"># Versión 1</span>
+
+<span class="cm"># archivo: main.py</span>
+<span class="kw">from</span> utils <span class="kw">import</span> helper
+
+<span class="dec">@njit</span>(cache=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">main_func</span>(data):
+    result = np.empty_like(data)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        result[i] = helper(data[i])
+    <span class="kw">return</span> result
+
+<span class="cm"># Ahora cambias utils.py:</span>
+<span class="cm"># def helper(x): return x ** 3   # Versión 2</span>
+<span class="cm"># </span>
+<span class="cm"># main_func sigue usando el CACHE VIEJO con x**2</span>
+<span class="cm"># ¡Tu código da resultados incorrectos sin error!</span>
+
+<span class="cm"># ✅ SOLUCIÓN: limpiar cache después de cambios</span>
+<span class="cm"># $ find . -name "__pycache__" -type d -exec rm -rf {} +</span>
+<span class="cm"># $ find . -name "*.nbi" -delete && find . -name "*.nbc" -delete</span>
+
+<span class="cm"># ☠️ OTRA TRAMPA: globals tratados como constantes</span>
+THRESHOLD = <span class="num">0.5</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">uses_global</span>(data):
+    count = <span class="num">0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        <span class="kw">if</span> data[i] > THRESHOLD:  <span class="cm"># Numba usa el valor de compilación</span>
+            count += <span class="num">1</span>
+    <span class="kw">return</span> count
+
+uses_global(np.random.rand(<span class="num">100</span>))  <span class="cm"># compila con THRESHOLD=0.5</span>
+THRESHOLD = <span class="num">0.9</span>                    <span class="cm"># ¡Cambiar esto NO tiene efecto!</span>
+uses_global(np.random.rand(<span class="num">100</span>))  <span class="cm"># sigue usando 0.5</span>
+
+<span class="cm"># ✅ SOLUCIÓN: pasar como argumento</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">uses_argument</span>(data, threshold):  <span class="cm"># ✅ argumento, no global</span>
+    count = <span class="num">0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        <span class="kw">if</span> data[i] > threshold:
+            count += <span class="num">1</span>
+    <span class="kw">return</span> count</code></pre>
+
+    <!-- ============ ANTI-PATTERN 8 ============ -->
+    <h3 style="color: #f85149;">☠️ #8 — Boundscheck desactivado + índice fuera de rango = corrupción silenciosa</h3>
+    <p><strong>Severidad: CATASTRÓFICA</strong> | <strong>Frecuencia: MEDIA</strong></p>
+
+<pre><code><span class="cm"># En Numba, boundscheck está DESACTIVADO por defecto (por rendimiento)</span>
+<span class="cm"># Esto significa que acceder fuera de rango NO da error</span>
+<span class="cm"># — lee o escribe basura en memoria adyacente</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">silent_corruption</span>(data, indices):
+    result = np.zeros(<span class="num">10</span>)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(indices)):
+        idx = indices[i]
+        result[idx] += data[i]  <span class="cm"># Si idx >= 10 → escribe en memoria AJENA</span>
+    <span class="kw">return</span> result                <span class="cm"># result puede tener valores corruptos</span>
+
+<span class="cm"># Con datos reales esto puede:</span>
+<span class="cm"># - Corromper otros arrays en memoria</span>
+<span class="cm"># - Causar segfault HORAS después (cuando accedes al array corrupto)</span>
+<span class="cm"># - Dar resultados sutilmente incorrectos que pasan validación</span>
+
+<span class="cm"># ✅ DURANTE DESARROLLO: activar boundscheck</span>
+<span class="dec">@njit</span>(boundscheck=<span class="num">True</span>)  <span class="cm"># o NUMBA_BOUNDSCHECK=1 como env var</span>
+<span class="kw">def</span> <span class="fn">safe_during_dev</span>(data, indices):
+    result = np.zeros(<span class="num">10</span>)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(indices)):
+        idx = indices[i]
+        result[idx] += data[i]  <span class="cm"># Ahora lanza IndexError si idx >= 10</span>
+    <span class="kw">return</span> result
+
+<span class="cm"># ✅ EN PRODUCCIÓN: validar indices manualmente (sin boundscheck overhead)</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">safe_in_production</span>(data, indices, n_bins):
+    result = np.zeros(n_bins)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(indices)):
+        idx = indices[i]
+        <span class="kw">if</span> <span class="num">0</span> <= idx < n_bins:     <span class="cm"># ✅ Guard manual, mínimo overhead</span>
+            result[idx] += data[i]
+    <span class="kw">return</span> result</code></pre>
+
+    <!-- ============ ANTI-PATTERN 9 ============ -->
+    <h3 style="color: #f85149;">☠️ #9 — Oversubscription: más threads ≠ más rápido</h3>
+    <p><strong>Severidad: ALTA</strong> | <strong>Frecuencia: ALTA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: Numba parallel + NumPy con MKL + scikit-learn paralelo</span>
+<span class="cm"># Cada uno lanza SUS PROPIOS threads sin coordinarse</span>
+
+<span class="cm"># Escenario real:</span>
+<span class="cm"># - Tu CPU tiene 8 cores físicos (16 con HyperThreading)</span>
+<span class="cm"># - Numba lanza 16 threads (ve 16 "cores" lógicos)</span>
+<span class="cm"># - NumPy con MKL lanza 16 threads para np.dot()</span>
+<span class="cm"># - scikit-learn lanza 16 threads para cross_val_score()</span>
+<span class="cm"># Total: 48 threads compitiendo por 8 cores físicos</span>
+<span class="cm"># → Context switches masivos, cache invalidation, 3x MÁS LENTO</span>
+
+<span class="cm"># ☠️ Ejemplo concreto:</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">numba_step</span>(data):
+    <span class="kw">return</span> np.sum(data ** <span class="num">2</span>)  <span class="cm"># Numba usa 16 threads</span>
+
+<span class="kw">def</span> <span class="fn">pipeline</span>(data):
+    step1 = numba_step(data)          <span class="cm"># 16 threads Numba</span>
+    step2 = np.dot(data.T, data)      <span class="cm"># 16 threads MKL (SIMULTÁNEOS si async)</span>
+    <span class="kw">return</span> step1, step2
+
+<span class="cm"># ✅ SOLUCIÓN: coordinar threads entre librerías</span>
+<span class="kw">import</span> os
+os.environ[<span class="st">'MKL_NUM_THREADS'</span>] = <span class="st">'4'</span>       <span class="cm"># ANTES de importar numpy</span>
+os.environ[<span class="st">'OMP_NUM_THREADS'</span>] = <span class="st">'4'</span>       <span class="cm"># ANTES de importar numpy</span>
+os.environ[<span class="st">'NUMBA_NUM_THREADS'</span>] = <span class="st">'4'</span>     <span class="cm"># ANTES de importar numba</span>
+
+<span class="cm"># O dinámicamente:</span>
+<span class="kw">from</span> numba <span class="kw">import</span> set_num_threads
+set_num_threads(<span class="num">4</span>)   <span class="cm"># Cuando Numba está activo</span>
+set_num_threads(<span class="num">1</span>)   <span class="cm"># Cuando dejas que MKL use todos los cores</span></code></pre>
+
+    <!-- ============ ANTI-PATTERN 10 ============ -->
+    <h3 style="color: #f85149;">☠️ #10 — Usar typed.Dict o typed.List como sustituto de arrays</h3>
+    <p><strong>Severidad: MEDIA</strong> | <strong>Frecuencia: MEDIA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: usar Dict para algo que debería ser un array</span>
+<span class="kw">from</span> numba <span class="kw">import</span> types
+<span class="kw">from</span> numba.typed <span class="kw">import</span> Dict
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">count_with_dict</span>(data, n_bins):
+    <span class="cm">"""Contar ocurrencias usando un dict — LENTO."""</span>
+    counts = Dict.empty(key_type=types.int64, value_type=types.int64)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        key = <span class="fn">int</span>(data[i] * n_bins)
+        <span class="kw">if</span> key <span class="kw">in</span> counts:
+            counts[key] += <span class="num">1</span>       <span class="cm"># ☠️ Hash lookup + hash insert cada vez</span>
+        <span class="kw">else</span>:
+            counts[key] = <span class="num">1</span>
+    <span class="kw">return</span> counts
+
+<span class="cm"># ✅ CORRECTO: usar array directo (si las keys son índices enteros)</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">count_with_array</span>(data, n_bins):
+    counts = np.zeros(n_bins, dtype=np.int64)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(data)):
+        idx = <span class="fn">int</span>(data[i] * n_bins)
+        <span class="kw">if</span> idx >= n_bins:
+            idx = n_bins - <span class="num">1</span>
+        counts[idx] += <span class="num">1</span>          <span class="cm"># ✅ Acceso directo O(1), sin hash</span>
+    <span class="kw">return</span> counts
+
+<span class="cm"># Benchmark con 10M elementos:</span>
+<span class="cm"># Dict version:  ~2.1 segundos</span>
+<span class="cm"># Array version: ~0.05 segundos → 42x más rápido</span>
+
+<span class="cm"># REGLA: Si tus keys son enteros consecutivos 0..N → usa un array</span>
+<span class="cm"># Usa Dict SOLO cuando las keys son no-consecutivas o strings</span></code></pre>
+
+    <!-- ============ ANTI-PATTERN 11 ============ -->
+    <h3 style="color: #f85149;">☠️ #11 — parallel=True con datos pequeños</h3>
+    <p><strong>Severidad: MEDIA</strong> | <strong>Frecuencia: ALTA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPA: paralelizar operaciones sobre arrays pequeños</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">overkill</span>(small_array):
+    <span class="kw">return</span> np.sum(np.sqrt(small_array))
+
+data = np.random.rand(<span class="num">100</span>)  <span class="cm"># 100 elementos = 800 bytes</span>
+
+<span class="cm"># Benchmark:</span>
+<span class="cm"># @njit (sin parallel):   0.3 μs</span>
+<span class="cm"># @njit(parallel=True):   45 μs → 150x MÁS LENTO</span>
+<span class="cm"># ¡El overhead de coordinar 8 threads es mayor que todo el cómputo!</span>
+
+<span class="cm"># ✅ REGLA PRÁCTICA: parallel=True solo rinde con:</span>
+<span class="cm"># - Arrays de > 10,000 elementos para operaciones simples</span>
+<span class="cm"># - Arrays de > 1,000 elementos para operaciones costosas (sin, cos, etc.)</span>
+<span class="cm"># - Siempre verificar con un scaling test (módulo de benchmarking)</span>
+
+<span class="cm"># ✅ Si no sabes el tamaño de antemano, decide en runtime:</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">smart_serial</span>(x):
+    <span class="kw">return</span> np.sum(np.sqrt(x))
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">smart_parallel</span>(x):
+    <span class="kw">return</span> np.sum(np.sqrt(x))
+
+<span class="kw">def</span> <span class="fn">smart_dispatch</span>(x, threshold=<span class="num">10_000</span>):
+    <span class="kw">if</span> <span class="fn">len</span>(x) < threshold:
+        <span class="kw">return</span> smart_serial(x)
+    <span class="kw">return</span> smart_parallel(x)</code></pre>
+
+    <!-- ============ ANTI-PATTERN 12 ============ -->
+    <h3 style="color: #f85149;">☠️ #12 — Acceso no contiguo disfrazado</h3>
+    <p><strong>Severidad: ALTA</strong> | <strong>Frecuencia: MEDIA</strong></p>
+
+<pre><code><span class="cm"># ☠️ TRAMPAS que destruyen la contigüidad sin que lo notes:</span>
+
+<span class="cm"># 1. Slices con step</span>
+data = np.random.rand(<span class="num">1000000</span>)
+every_other = data[::2]       <span class="cm"># stride = 16 bytes, NO contiguo</span>
+
+<span class="cm"># 2. Transponer sin copiar</span>
+matrix = np.random.rand(<span class="num">1000</span>, <span class="num">1000</span>)
+transposed = matrix.T          <span class="cm"># NO es C-contiguous, es F-contiguous</span>
+<span class="cm"># Si tu loop interno recorre filas del transpuesto → cache disaster</span>
+
+<span class="cm"># 3. Fancy indexing devuelve copia contigua... pero el loop puede no serlo</span>
+indices = np.array([<span class="num">0</span>, <span class="num">500</span>, <span class="num">1</span>, <span class="num">501</span>, <span class="num">2</span>, <span class="num">502</span>])
+selected = matrix[indices]     <span class="cm"># selected ES contiguo, pero los accesos no</span>
+
+<span class="cm"># 4. Reshape que cambia strides</span>
+flat = np.random.rand(<span class="num">1000000</span>)
+matrix_view = flat.reshape(<span class="num">1000</span>, <span class="num">1000</span>)  <span class="cm"># OK, C-contiguous</span>
+col_major = matrix_view.T                    <span class="cm"># ☠️ F-contiguous</span>
+
+<span class="cm"># ✅ SIEMPRE verificar antes de procesar:</span>
+<span class="fn">print</span>(f<span class="st">"C-contiguo: {matrix_view.flags.c_contiguous}"</span>)
+<span class="fn">print</span>(f<span class="st">"F-contiguo: {matrix_view.flags.f_contiguous}"</span>)
+<span class="fn">print</span>(f<span class="st">"Strides: {matrix_view.strides}"</span>)
+
+<span class="cm"># ✅ Forzar contigüidad cuando sea necesario:</span>
+safe_data = np.ascontiguousarray(col_major)  <span class="cm"># copia a C-contiguous</span></code></pre>
+
+    <!-- ============ RESUMEN ============ -->
+    <h3>📊 Clasificación de severidad</h3>
+
+    <table>
+      <tr><th>Anti-Pattern</th><th>Síntoma</th><th>Costo a escala</th><th>Detección</th></tr>
+      <tr><td>#1 parallel en loop externo</td><td>Lentitud inexplicable</td><td>100-1000x más lento</td><td>Profiler muestra overhead en dispatch</td></tr>
+      <tr><td>#2 Alocaciones en loop</td><td>Uso de memoria creciente</td><td>2-10x más lento</td><td>NUMBA_DEBUG_NRT=1</td></tr>
+      <tr><td>#3 parallel=True inactivo</td><td>Usa 1 core en vez de 8</td><td>8x más lento (en 8 cores)</td><td>parallel_diagnostics()</td></tr>
+      <tr><td>#4 Race conditions</td><td>Resultados variables</td><td>Datos corruptos</td><td>Ejecutar 10x y comparar sumas</td></tr>
+      <tr><td>#5 Recompilación</td><td>Pausas periódicas</td><td>Segundos por tipo nuevo</td><td>len(func.signatures)</td></tr>
+      <tr><td>#6 Numba donde NumPy gana</td><td>Más lento que sin Numba</td><td>Hasta 30x más lento</td><td>Benchmark vs NumPy puro</td></tr>
+      <tr><td>#7 Cache invalidado</td><td>Resultados incorrectos</td><td>Bugs silenciosos</td><td>Limpiar cache, re-test</td></tr>
+      <tr><td>#8 Sin boundscheck</td><td>Segfaults aleatorios</td><td>Corrupción de memoria</td><td>NUMBA_BOUNDSCHECK=1</td></tr>
+      <tr><td>#9 Oversubscription</td><td>Más threads = más lento</td><td>2-5x más lento</td><td>htop, top</td></tr>
+      <tr><td>#10 Dict como array</td><td>Lentitud en lookups</td><td>10-50x más lento</td><td>Benchmark vs array</td></tr>
+      <tr><td>#11 parallel con datos chicos</td><td>Overhead domina</td><td>10-150x más lento</td><td>Scaling test</td></tr>
+      <tr><td>#12 Acceso no contiguo</td><td>Throughput bajo</td><td>3-10x más lento</td><td>arr.flags.c_contiguous</td></tr>
+    </table>
+
+    <div class="tip">
+      <strong>Workflow defensivo para proyectos a escala:</strong><br>
+      1. Después de cada <code>@njit(parallel=True)</code> → <code>parallel_diagnostics(level=1)</code><br>
+      2. Durante desarrollo → <code>NUMBA_BOUNDSCHECK=1</code><br>
+      3. Antes de producción → scaling test (1K → 10M)<br>
+      4. Monitorear → <code>len(func.signatures)</code> no debe crecer con el tiempo<br>
+      5. Benchmark → siempre comparar contra NumPy puro como baseline<br>
+      6. Race conditions → ejecutar 10x, verificar que sumas son idénticas
+    </div>
+
+  </div>
+</div>
+  
 <!--
   ============================================================
   MÓDULO EXTRA: Guía Exhaustiva de Decoradores
