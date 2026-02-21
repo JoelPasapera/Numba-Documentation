@@ -948,7 +948,875 @@ myexp = functype(addr)
 </div>
 
 
+<!--
+  ============================================================
+  MÓDULOS: Memoria & Cache + Benchmarking Profesional
+  ============================================================
+  INSTRUCCIONES: Copia todo este bloque y pégalo en tu guía
+  JUSTO DESPUÉS del módulo de decoradores (★) y ANTES del módulo 10 (Cheatsheet).
+  
+  Actualiza el TOC añadiendo en el segundo <div> del toc-grid:
+      <a href="#m-memory">⚡ Memoria, Cache y CPU: El Fundamento Invisible</a>
+      <a href="#m-bench">🔬 Benchmarking: Medir Sin Mentirte</a>
+  ============================================================
+-->
 
+<!-- ==================== MÓDULO MEMORIA ==================== -->
+<div class="module" id="m-memory">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">⚡</span> Memoria, Cache y CPU: El Fundamento Invisible del Rendimiento</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <p>Esto es lo que <strong>nadie te enseña</strong> pero determina el 80% del rendimiento de tu código numérico. Tu CPU puede hacer miles de millones de operaciones por segundo, pero si está esperando datos de RAM, está literalmente sentada sin hacer nada. Entender esto transforma cómo escribes código para siempre.</p>
+
+    <!-- ============ JERARQUÍA DE MEMORIA ============ -->
+    <h3>🏗️ La jerarquía de memoria: por qué tu código es lento</h3>
+
+    <p>Tu CPU NO accede a RAM directamente. Existe una cadena de cachés intermedias, cada una más rápida pero más pequeña:</p>
+
+    <table>
+      <tr><th>Nivel</th><th>Tamaño típico</th><th>Latencia</th><th>Analogía</th></tr>
+      <tr><td><strong>Registros</strong></td><td>~1 KB</td><td>~0.3 ns (1 ciclo)</td><td>Tu mano: instantáneo</td></tr>
+      <tr><td><strong>Cache L1</strong></td><td>32-64 KB por core</td><td>~1 ns (3-4 ciclos)</td><td>Tu escritorio: 1 segundo</td></tr>
+      <tr><td><strong>Cache L2</strong></td><td>256 KB - 1 MB por core</td><td>~4 ns (10-12 ciclos)</td><td>Tu estantería: 4 segundos</td></tr>
+      <tr><td><strong>Cache L3</strong></td><td>8-64 MB compartido</td><td>~12 ns (30-40 ciclos)</td><td>La biblioteca del edificio: 12 segundos</td></tr>
+      <tr><td><strong>RAM</strong></td><td>8-128 GB</td><td>~60-100 ns (200+ ciclos)</td><td>Amazon: un minuto esperando</td></tr>
+      <tr><td><strong>Disco SSD</strong></td><td>TB</td><td>~10,000-100,000 ns</td><td>Pedir algo de China: horas</td></tr>
+    </table>
+
+    <div class="warn">
+      Cuando tu CPU necesita un dato que NO está en cache (un <strong>cache miss</strong>), espera ~200 ciclos para traerlo de RAM. En esos 200 ciclos podría haber hecho 200 multiplicaciones de punto flotante. <strong>Un programa con muchos cache misses puede estar ejecutando a un 5% de la capacidad real de tu CPU.</strong>
+    </div>
+
+    <h3>📦 Cache lines: la unidad mínima de memoria</h3>
+
+    <p>La CPU nunca trae "un solo número" de RAM. Siempre trae un bloque llamado <strong>cache line</strong>, típicamente de <strong>64 bytes</strong>. Si trabajas con <code>float64</code> (8 bytes cada uno), una cache line trae 8 valores consecutivos de golpe.</p>
+
+    <p>Esto tiene una consecuencia brutal:</p>
+
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit
+
+<span class="cm"># Imagina una matriz 1000x1000 de float64 en C-order (row-major)</span>
+<span class="cm"># En memoria, se almacena así:</span>
+<span class="cm"># [fila0_col0, fila0_col1, fila0_col2, ..., fila1_col0, fila1_col1, ...]</span>
+<span class="cm">#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="cm">#  Estos 8 valores están en la MISMA cache line</span>
+
+matrix = np.random.rand(<span class="num">1000</span>, <span class="num">1000</span>)
+
+<span class="cm"># ✅ ACCESO POR FILAS: aprovecha la cache line completa</span>
+<span class="cm"># Cuando lees matrix[0, 0], la CPU trae matrix[0, 0:8] gratis</span>
+<span class="cm"># El siguiente acceso matrix[0, 1] YA ESTÁ EN CACHE → 0 espera</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">sum_row_major</span>(matrix):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">0</span>]):      <span class="cm"># filas (dimensión externa)</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):  <span class="cm"># columnas (dimensión interna)</span>
+            total += matrix[i, j]          <span class="cm"># ✅ Acceso contiguo en memoria</span>
+    <span class="kw">return</span> total
+
+<span class="cm"># ❌ ACCESO POR COLUMNAS: destruye la cache</span>
+<span class="cm"># Cuando lees matrix[0, 0], la CPU trae fila0_col0..col7</span>
+<span class="cm"># Pero el siguiente acceso es matrix[1, 0] → OTRA cache line → cache miss</span>
+<span class="cm"># Cada acceso salta 1000 float64 (8000 bytes) → 125 cache lines de distancia</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">sum_col_major</span>(matrix):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):  <span class="cm"># columnas primero</span>
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">0</span>]):  <span class="cm"># filas después</span>
+            total += matrix[i, j]          <span class="cm"># ❌ Saltos de 8KB entre accesos</span>
+    <span class="kw">return</span> total
+
+<span class="cm"># Benchmark real en una matriz 4000x4000:</span>
+<span class="cm"># sum_row_major: ~12ms  (cache hits: ~98%)</span>
+<span class="cm"># sum_col_major: ~85ms  (cache hits: ~12%)</span>
+<span class="cm"># ¡~7x más lento con EXACTAMENTE las mismas operaciones matemáticas!</span></code></pre>
+
+    <div class="perf">
+      <strong>Regla de oro:</strong> En C-order (default de NumPy), el loop más interno siempre debe recorrer la <strong>última dimensión</strong> (columnas en 2D). En Fortran-order, el loop más interno recorre la <strong>primera dimensión</strong>. Si ves un loop donde el índice externo es el que varía más rápido, tu código tiene un problema serio de cache.
+    </div>
+
+    <!-- ============ C-ORDER vs F-ORDER ============ -->
+    <h3>🔄 C-order vs Fortran-order: elige según tu patrón de acceso</h3>
+
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="cm"># C-ORDER (row-major): filas son contiguas</span>
+<span class="cm"># Memoria: [f0c0, f0c1, f0c2, f1c0, f1c1, f1c2, ...]</span>
+c_matrix = np.zeros((<span class="num">1000</span>, <span class="num">1000</span>), order=<span class="st">'C'</span>)  <span class="cm"># default de NumPy</span>
+
+<span class="cm"># FORTRAN-ORDER (column-major): columnas son contiguas</span>
+<span class="cm"># Memoria: [f0c0, f1c0, f2c0, f0c1, f1c1, f2c1, ...]</span>
+f_matrix = np.zeros((<span class="num">1000</span>, <span class="num">1000</span>), order=<span class="st">'F'</span>)
+<span class="cm"># Equivalente en Numba: np.zeros((1000, 1000)[::-1]).T</span>
+
+<span class="cm"># ¿CUÁNDO USAR CADA UNO?</span>
+
+<span class="cm"># Caso 1: Procesar datos tabulares (filas = registros, columnas = features)</span>
+<span class="cm"># Si accedes fila por fila → C-order ✅</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">procesar_registros</span>(data):  <span class="cm"># data es (n_registros, n_features) C-order</span>
+    n = data.shape[<span class="num">0</span>]
+    result = np.empty(n)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        <span class="cm"># Acceder a data[i, :] es contiguo en C-order ✅</span>
+        result[i] = np.sum(data[i, :])
+    <span class="kw">return</span> result
+
+<span class="cm"># Caso 2: Series temporales (filas = tiempo, columnas = sensores)</span>
+<span class="cm"># Si accedes columna por columna → Fortran-order ✅</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">procesar_sensores</span>(data):  <span class="cm"># data es (n_tiempos, n_sensores) F-order</span>
+    n_sensors = data.shape[<span class="num">1</span>]
+    result = np.empty(n_sensors)
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(n_sensors):
+        <span class="cm"># Acceder a data[:, j] es contiguo en F-order ✅</span>
+        result[j] = np.mean(data[:, j])
+    <span class="kw">return</span> result</code></pre>
+
+    <h4>Verificar el layout de tus arrays</h4>
+<pre><code>arr = np.zeros((<span class="num">100</span>, <span class="num">100</span>))
+<span class="fn">print</span>(arr.flags)
+<span class="cm">#   C_CONTIGUOUS : True    ← C-order</span>
+<span class="cm">#   F_CONTIGUOUS : False</span>
+
+<span class="cm"># Strides te dicen cuántos bytes hay entre elementos consecutivos</span>
+<span class="fn">print</span>(arr.strides)
+<span class="cm"># (800, 8) → saltar una fila = 800 bytes, saltar una columna = 8 bytes</span>
+<span class="cm"># El stride más pequeño (8) es la dimensión contigua → última dim (columnas)</span>
+
+<span class="cm"># ⚠️ CUIDADO: operaciones que destruyen la contigüidad</span>
+sliced = arr[::2, :]  <span class="cm"># Slice con step</span>
+<span class="fn">print</span>(sliced.flags.c_contiguous)  <span class="cm"># False — ya no es contiguo</span>
+<span class="fn">print</span>(sliced.strides)             <span class="cm"># (1600, 8) — stride duplicado</span>
+
+transposed = arr.T
+<span class="fn">print</span>(transposed.flags.c_contiguous)  <span class="cm"># False</span>
+<span class="fn">print</span>(transposed.flags.f_contiguous)  <span class="cm"># True — ahora es F-order</span></code></pre>
+
+    <h4>Forzar contigüidad cuando la necesitas</h4>
+<pre><code><span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">procesar_seguro</span>(data):
+    <span class="cm"># Si data puede llegar no-contiguo (ej: un slice), haz copia contigua</span>
+    <span class="kw">if not</span> data.flags.c_contiguous:
+        data = np.ascontiguousarray(data)  <span class="cm"># Copia, pero ahora es C-contiguo</span>
+
+    <span class="cm"># NOTA: np.ascontiguousarray no está en Numba nopython mode</span>
+    <span class="cm"># Alternativa dentro de @njit:</span>
+    data_copy = data.copy()  <span class="cm"># .copy() devuelve C-contiguous por defecto</span>
+    <span class="kw">return</span> data_copy</code></pre>
+
+    <div class="tip">
+      En las signatures de Numba puedes <strong>exigir</strong> un layout específico:<br>
+      <code>types.Array(types.float64, 2, 'C')</code> → solo acepta C-contiguous<br>
+      <code>types.Array(types.float64, 2, 'A')</code> → acepta cualquier layout<br>
+      Si declaras <code>'C'</code> y Numba sabe que el array es contiguo, puede generar código más agresivamente optimizado.
+    </div>
+
+    <!-- ============ PRE-ALOCACIÓN ============ -->
+    <h3>🏭 Pre-alocación: nunca aloquemos dentro del loop caliente</h3>
+
+    <p>Cada <code>np.zeros()</code>, <code>np.empty()</code>, o <code>np.array()</code> dentro de un loop pide memoria al sistema operativo. Esto implica: syscall al kernel, posible page fault, invalidación de cache, y trabajo para el garbage collector. En un loop que se ejecuta millones de veces, esto es devastador.</p>
+
+<pre><code><span class="cm"># ❌ TERRIBLE: aloca memoria en CADA iteración</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">procesar_terrible</span>(dataset, n_iter):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n_iter):
+        temp = np.zeros(<span class="num">1000</span>)      <span class="cm"># ❌ Alocación + inicialización × n_iter veces</span>
+        result = np.empty(<span class="num">1000</span>)    <span class="cm"># ❌ Otra alocación × n_iter veces</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1000</span>):
+            temp[j] = dataset[i, j] ** <span class="num">2</span>
+            result[j] = np.sqrt(temp[j])
+    <span class="kw">return</span> result
+
+<span class="cm"># ✅ CORRECTO: pre-aloca FUERA del loop, reutiliza buffers</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">procesar_optimo</span>(dataset, n_iter):
+    temp = np.empty(<span class="num">1000</span>)        <span class="cm"># ✅ Se aloca UNA sola vez</span>
+    result = np.empty(<span class="num">1000</span>)      <span class="cm"># ✅ Se aloca UNA sola vez</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n_iter):
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(<span class="num">1000</span>):
+            temp[j] = dataset[i, j] ** <span class="num">2</span>  <span class="cm"># Reutiliza el buffer</span>
+            result[j] = np.sqrt(temp[j])
+    <span class="kw">return</span> result
+<span class="cm"># Con n_iter=100000: terrible ~8.2s vs óptimo ~1.1s → 7.5x más rápido</span></code></pre>
+
+    <h4>Allocation hoisting: Numba lo intenta, pero no siempre puede</h4>
+<pre><code><span class="cm"># Numba con parallel=True INTENTA hoistear alocaciones automáticamente:</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">auto_hoist</span>(n):
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n):
+        temp = np.zeros((<span class="num">50</span>, <span class="num">50</span>))  <span class="cm"># Numba intenta sacar esto fuera del loop</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(<span class="num">50</span>):
+            temp[j, j] = i
+
+<span class="cm"># Internamente, Numba transforma esto a:</span>
+<span class="cm"># temp = np.empty((50, 50))        ← alocación hoisted fuera del loop</span>
+<span class="cm"># for i in prange(n):</span>
+<span class="cm">#     temp[:] = 0                   ← solo la inicialización queda dentro</span>
+<span class="cm">#     for j in range(50):</span>
+<span class="cm">#         temp[j, j] = i</span>
+
+<span class="cm"># PERO: solo funciona con np.empty y np.zeros</span>
+<span class="cm"># Alocaciones más complejas o condicionales NO se hoistean</span>
+<span class="cm"># REGLA: no confíes en el hoisting automático. Pre-aloca tú mismo.</span></code></pre>
+
+    <!-- ============ EVITAR TEMPORALES ============ -->
+    <h3>🚫 Eliminar arrays temporales innecesarios</h3>
+
+    <p>Una de las ventajas más grandes de Numba sobre NumPy puro es que puedes eliminar arrays temporales. En NumPy vectorizado, cada operación intermedia crea un array temporal:</p>
+
+<pre><code><span class="cm"># Con NumPy puro — CADA operación crea un array temporal en RAM:</span>
+<span class="kw">def</span> <span class="fn">numpy_style</span>(x):
+    temp1 = np.sin(x)           <span class="cm"># temp1: 80MB si x tiene 10M float64</span>
+    temp2 = temp1 ** <span class="num">2</span>          <span class="cm"># temp2: otros 80MB</span>
+    temp3 = np.cos(x)           <span class="cm"># temp3: otros 80MB</span>
+    temp4 = temp3 ** <span class="num">2</span>          <span class="cm"># temp4: otros 80MB</span>
+    result = temp1 + temp3      <span class="cm"># result: otros 80MB</span>
+    <span class="kw">return</span> result
+    <span class="cm"># Total: ~400MB de temporales para un input de 80MB</span>
+    <span class="cm"># Cada temporal destruye la cache y causa page faults</span>
+
+<span class="cm"># Con Numba — CERO temporales, todo en registros/cache:</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">numba_fused</span>(x):
+    n = <span class="fn">len</span>(x)
+    result = np.empty(n)
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(n):
+        <span class="cm"># Cada valor se calcula y se guarda INMEDIATAMENTE</span>
+        <span class="cm"># sin crear arrays intermedios</span>
+        s = np.sin(x[i])
+        c = np.cos(x[i])
+        result[i] = s ** <span class="num">2</span> + c ** <span class="num">2</span>
+        <span class="cm"># s y c viven en registros de CPU, no en RAM</span>
+    <span class="kw">return</span> result
+    <span class="cm"># Total: 0 bytes de temporales. Solo input + output.</span>
+
+<span class="cm"># Con 10M elementos:</span>
+<span class="cm"># numpy_style:  ~650ms (memory bandwidth limited)</span>
+<span class="cm"># numba_fused:  ~180ms (compute limited — que es lo que queremos)</span></code></pre>
+
+    <div class="perf">
+      <strong>Patrón fundamental:</strong> Fusiona operaciones que NumPy haría en pasos separados en un solo loop. Esto mantiene los datos en cache L1/L2 durante todo el cálculo. Es la razón #1 por la que Numba puede superar a NumPy incluso en operaciones vectorizadas.
+    </div>
+
+    <!-- ============ CHUNKING ============ -->
+    <h3>🧩 Chunking: procesamiento por bloques que caben en cache</h3>
+
+    <p>Cuando tu dataset es enorme (cientos de MB o GB), ni siquiera un loop fila-por-fila es óptimo. El truco es procesar en <strong>bloques que quepan en cache L2/L3</strong>.</p>
+
+<pre><code><span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">sum_naive</span>(matrix):
+    <span class="cm">"""Suma de todos los elementos — naive."""</span>
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">0</span>]):
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):
+            total += matrix[i, j]
+    <span class="kw">return</span> total
+<span class="cm"># Para matrices pequeñas, esto está bien.</span>
+<span class="cm"># Para matrices de 10000x10000+, la cache L2 (256KB) no puede</span>
+<span class="cm"># contener una fila entera si es muy ancha.</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">sum_blocked</span>(matrix, block_size=<span class="num">64</span>):
+    <span class="cm">"""Suma con blocking: procesa sub-matrices que caben en cache L2."""</span>
+    total = <span class="num">0.0</span>
+    rows, cols = matrix.shape
+
+    <span class="cm"># Recorre por bloques de block_size × block_size</span>
+    <span class="kw">for</span> bi <span class="kw">in</span> <span class="fn">range</span>(<span class="num">0</span>, rows, block_size):
+        <span class="kw">for</span> bj <span class="kw">in</span> <span class="fn">range</span>(<span class="num">0</span>, cols, block_size):
+            <span class="cm"># Este bloque (64×64 float64 = 32KB) cabe en L1 cache</span>
+            bi_end = <span class="fn">min</span>(bi + block_size, rows)
+            bj_end = <span class="fn">min</span>(bj + block_size, cols)
+            <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(bi, bi_end):
+                <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(bj, bj_end):
+                    total += matrix[i, j]
+    <span class="kw">return</span> total
+
+<span class="cm"># Ejemplo clásico donde blocking es CRÍTICO: multiplicación de matrices</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">matmul_blocked</span>(A, B, block_size=<span class="num">64</span>):
+    <span class="cm">"""Multiplicación de matrices con cache blocking.
+    Para matrices grandes, puede ser 3-5x más rápido que el naive."""</span>
+    M, K = A.shape
+    K2, N = B.shape
+    C = np.zeros((M, N))
+
+    <span class="kw">for</span> bi <span class="kw">in</span> <span class="fn">range</span>(<span class="num">0</span>, M, block_size):
+        <span class="kw">for</span> bj <span class="kw">in</span> <span class="fn">range</span>(<span class="num">0</span>, N, block_size):
+            <span class="kw">for</span> bk <span class="kw">in</span> <span class="fn">range</span>(<span class="num">0</span>, K, block_size):
+                <span class="cm"># Multiplicar sub-bloques que caben en cache</span>
+                bi_end = <span class="fn">min</span>(bi + block_size, M)
+                bj_end = <span class="fn">min</span>(bj + block_size, N)
+                bk_end = <span class="fn">min</span>(bk + block_size, K)
+                <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(bi, bi_end):
+                    <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(bj, bj_end):
+                        temp = <span class="num">0.0</span>
+                        <span class="kw">for</span> k <span class="kw">in</span> <span class="fn">range</span>(bk, bk_end):
+                            temp += A[i, k] * B[k, j]
+                        C[i, j] += temp
+    <span class="kw">return</span> C</code></pre>
+
+    <h4>¿Cómo elegir el tamaño del bloque?</h4>
+    <table>
+      <tr><th>Cache objetivo</th><th>Tamaño típico</th><th>block_size para float64</th><th>Cálculo</th></tr>
+      <tr><td>L1 (32KB)</td><td>32,768 bytes</td><td><strong>64×64</strong></td><td>64×64×8 = 32,768 bytes</td></tr>
+      <tr><td>L2 (256KB)</td><td>262,144 bytes</td><td><strong>128×128</strong></td><td>128×128×8 = 131,072 (dejas espacio para otros datos)</td></tr>
+      <tr><td>L3 (8MB)</td><td>8,388,608 bytes</td><td><strong>512×512</strong></td><td>Para datasets gigantes con poca reutilización</td></tr>
+    </table>
+
+    <div class="info">
+      La regla general: el bloque completo (3 sub-matrices para matmul: bloque de A + bloque de B + bloque de C) debe caber en el cache que estás apuntando. Para L1 targeting con matmul: <code>3 × block_size² × 8 bytes < 32KB</code>, así que <code>block_size ≈ 36</code>. En la práctica, <strong>potencias de 2 entre 32 y 128</strong> suelen funcionar bien. Experimenta con benchmarking.
+    </div>
+
+    <!-- ============ PATRONES DE ACCESO ============ -->
+    <h3>🔁 Patrones de acceso: de terrible a óptimo</h3>
+
+<pre><code><span class="cm"># Escenario: Transponer y procesar una matriz grande</span>
+<span class="cm"># Datos: 5000×5000 de float64 (200MB)</span>
+
+<span class="cm"># ❌ NIVEL 1 — TERRIBLE: acceso aleatorio</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">terrible</span>(matrix, indices):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> idx <span class="kw">in</span> indices:  <span class="cm"># indices aleatorios → cache miss garantizado</span>
+        total += matrix.flat[idx]
+    <span class="kw">return</span> total
+
+<span class="cm"># ❌ NIVEL 2 — MALO: stride grande (acceso por columnas en C-order)</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">malo</span>(matrix):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">0</span>]):
+            total += matrix[i, j]  <span class="cm"># stride = n_cols × 8 bytes</span>
+    <span class="kw">return</span> total
+
+<span class="cm"># 🆗 NIVEL 3 — DECENTE: acceso secuencial contiguo</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">decente</span>(matrix):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">0</span>]):
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):
+            total += matrix[i, j]  <span class="cm"># stride = 8 bytes (contiguo)</span>
+    <span class="kw">return</span> total
+
+<span class="cm"># ✅ NIVEL 4 — BUENO: contiguo + sin temporales + parallel</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">bueno</span>(matrix):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(matrix.shape[<span class="num">0</span>]):
+        row_sum = <span class="num">0.0</span>  <span class="cm"># acumulador local → vive en registro</span>
+        <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(matrix.shape[<span class="num">1</span>]):
+            row_sum += matrix[i, j]
+        total += row_sum  <span class="cm"># reducción paralela segura</span>
+    <span class="kw">return</span> total
+
+<span class="cm"># ⚡ NIVEL 5 — ÓPTIMO: blocking + parallel + fastmath + SVML</span>
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">optimo</span>(matrix, block_size=<span class="num">64</span>):
+    total = <span class="num">0.0</span>
+    rows, cols = matrix.shape
+    <span class="kw">for</span> bi <span class="kw">in</span> prange(<span class="num">0</span>, rows, block_size):  <span class="cm"># bloques en paralelo</span>
+        block_sum = <span class="num">0.0</span>
+        bi_end = <span class="fn">min</span>(bi + block_size, rows)
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(bi, bi_end):
+            <span class="kw">for</span> j <span class="kw">in</span> <span class="fn">range</span>(cols):
+                block_sum += matrix[i, j]
+        total += block_sum
+    <span class="kw">return</span> total
+
+<span class="cm"># Rendimiento relativo (5000×5000 float64):</span>
+<span class="cm"># terrible: ~850ms   (baseline)</span>
+<span class="cm"># malo:     ~340ms   (2.5x más rápido)</span>
+<span class="cm"># decente:  ~48ms    (17x más rápido)</span>
+<span class="cm"># bueno:    ~12ms    (70x más rápido)</span>
+<span class="cm"># óptimo:   ~6ms     (140x más rápido)</span></code></pre>
+
+    <!-- ============ STRUCT OF ARRAYS ============ -->
+    <h3>📐 Structure of Arrays (SoA) vs Array of Structures (AoS)</h3>
+
+    <p>Este es un patrón de diseño de datos que puede cambiar el rendimiento dramáticamente. Supongamos que tienes 1 millón de partículas con posición (x, y, z) y velocidad (vx, vy, vz):</p>
+
+<pre><code><span class="cm"># ❌ ARRAY OF STRUCTURES (AoS) — Natural pero lento para procesamiento masivo</span>
+<span class="cm"># Cada partícula es una "fila" con todos sus atributos juntos</span>
+<span class="cm"># Memoria: [x0,y0,z0,vx0,vy0,vz0, x1,y1,z1,vx1,vy1,vz1, ...]</span>
+particles_aos = np.zeros((<span class="num">1_000_000</span>, <span class="num">6</span>))  <span class="cm"># columnas: x,y,z,vx,vy,vz</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">update_positions_aos</span>(particles, dt):
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(particles.shape[<span class="num">0</span>]):
+        <span class="cm"># Para actualizar x, la CPU trae una cache line que contiene</span>
+        <span class="cm"># [x0, y0, z0, vx0, vy0, vz0, x1, y1] — solo usa x0 y vx0</span>
+        <span class="cm"># 6 de cada 8 valores en la cache line son BASURA para esta operación</span>
+        particles[i, <span class="num">0</span>] += particles[i, <span class="num">3</span>] * dt  <span class="cm"># x += vx * dt</span>
+        particles[i, <span class="num">1</span>] += particles[i, <span class="num">4</span>] * dt  <span class="cm"># y += vy * dt</span>
+        particles[i, <span class="num">2</span>] += particles[i, <span class="num">5</span>] * dt  <span class="cm"># z += vz * dt</span>
+
+<span class="cm"># ✅ STRUCTURE OF ARRAYS (SoA) — Cada atributo en su propio array</span>
+<span class="cm"># Memoria de x: [x0, x1, x2, x3, x4, x5, x6, x7, ...]</span>
+<span class="cm"># Memoria de vx: [vx0, vx1, vx2, vx3, vx4, vx5, vx6, vx7, ...]</span>
+n = <span class="num">1_000_000</span>
+x  = np.zeros(n)
+y  = np.zeros(n)
+z  = np.zeros(n)
+vx = np.random.randn(n)
+vy = np.random.randn(n)
+vz = np.random.randn(n)
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">update_positions_soa</span>(x, y, z, vx, vy, vz, dt):
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="fn">len</span>(x)):
+        <span class="cm"># La CPU trae [x0, x1, x2, x3, x4, x5, x6, x7]</span>
+        <span class="cm"># TODOS los 8 valores en la cache line son útiles</span>
+        <span class="cm"># Además, LLVM puede usar instrucciones SIMD (procesar 4 a la vez)</span>
+        x[i] += vx[i] * dt
+        y[i] += vy[i] * dt
+        z[i] += vz[i] * dt
+
+<span class="cm"># Benchmarks con 1M partículas:</span>
+<span class="cm"># AoS: ~4.8ms</span>
+<span class="cm"># SoA: ~0.6ms → 8x más rápido con los mismos cálculos</span></code></pre>
+
+    <div class="perf">
+      <strong>¿Cuándo usar SoA?</strong> Siempre que proceses <strong>un atributo a la vez</strong> sobre muchas entidades (actualizar todas las posiciones, calcular todas las energías, etc.). <strong>¿Cuándo usar AoS?</strong> Cuando proceses <strong>todos los atributos de una entidad</strong> juntos y esa entidad sea pequeña (cabe en pocas cache lines).
+    </div>
+
+    <!-- ============ RESUMEN VISUAL ============ -->
+    <h3>📋 Checklist de optimización de memoria</h3>
+    <table>
+      <tr><th>#</th><th>Verificar</th><th>Cómo</th></tr>
+      <tr><td>1</td><td>¿Loop interno recorre dimensión contigua?</td><td>Última dim en C-order, primera en F-order</td></tr>
+      <tr><td>2</td><td>¿Aloco arrays dentro de loops calientes?</td><td>Mover <code>np.empty/zeros</code> fuera del loop</td></tr>
+      <tr><td>3</td><td>¿Creo arrays temporales innecesarios?</td><td>Fusionar operaciones en un solo loop</td></tr>
+      <tr><td>4</td><td>¿Mis arrays son contiguos?</td><td>Verificar <code>arr.flags.c_contiguous</code></td></tr>
+      <tr><td>5</td><td>¿Mi dataset cabe en cache?</td><td>Si no → usar blocking con tamaño < L2</td></tr>
+      <tr><td>6</td><td>¿Estructura de datos apropiada?</td><td>SoA si proceso un atributo a la vez sobre muchas entidades</td></tr>
+      <tr><td>7</td><td>¿Acceso aleatorio a arrays grandes?</td><td>Reordenar datos o usar índices sorted</td></tr>
+      <tr><td>8</td><td>¿Uso <code>parallel=True</code> en ops de arrays?</td><td>Divide el trabajo en cache-friendly chunks entre cores</td></tr>
+    </table>
+
+  </div>
+</div>
+
+<!-- ==================== MÓDULO BENCHMARKING ==================== -->
+<div class="module" id="m-bench">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">🔬</span> Benchmarking: Medir Sin Mentirte</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <p>Sin benchmarking correcto, todas las optimizaciones anteriores son adivinanzas. La mayoría de la gente benchmarkea Numba mal, obtiene números incorrectos, y toma decisiones equivocadas. Esta sección te enseña a medir de verdad.</p>
+
+    <!-- ============ ERROR #1: COMPILACIÓN ============ -->
+    <h3>🚨 Error #1: Medir el tiempo de compilación</h3>
+
+    <p>El error más común y más grave. La primera llamada a una función Numba incluye el tiempo de compilación (0.1s - 5s). Si mides eso, tus benchmarks no significan nada.</p>
+
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit
+<span class="kw">import</span> time
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">mi_funcion</span>(x):
+    <span class="kw">return</span> np.sum(np.sqrt(x))
+
+data = np.random.rand(<span class="num">1_000_000</span>)
+
+<span class="cm"># ❌ MAL: incluye compilación</span>
+start = time.time()
+mi_funcion(data)
+<span class="fn">print</span>(f<span class="st">"Tiempo: {time.time() - start:.4f}s"</span>)
+<span class="cm"># Resultado: "Tiempo: 0.8523s" ← ¡MENTIRA! 0.85s son de compilación</span>
+
+<span class="cm"># ✅ BIEN: calentar primero, luego medir</span>
+mi_funcion(data)  <span class="cm"># ← WARMUP: primera llamada compila (descartar)</span>
+
+start = time.time()
+<span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(<span class="num">100</span>):
+    mi_funcion(data)
+elapsed = (time.time() - start) / <span class="num">100</span>
+<span class="fn">print</span>(f<span class="st">"Tiempo real: {elapsed*1000:.2f}ms"</span>)
+<span class="cm"># Resultado: "Tiempo real: 1.23ms" ← La verdad</span></code></pre>
+
+    <div class="warn">
+      <strong>SIEMPRE</strong> haz al menos una llamada de warmup antes de medir. Si estás midiendo diferentes funciones para comparar, haz warmup de TODAS antes de empezar a medir CUALQUIERA.
+    </div>
+
+    <!-- ============ TEMPLATE DE BENCHMARK ============ -->
+    <h3>🧪 Template de benchmarking profesional</h3>
+
+    <p>Este es el patrón que debes usar siempre. Cópialo y adáptalo:</p>
+
+<pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> numba <span class="kw">import</span> njit, prange
+<span class="kw">import</span> time
+<span class="kw">import</span> sys
+
+<span class="kw">def</span> <span class="fn">benchmark</span>(func, *args, n_warmup=<span class="num">3</span>, n_runs=<span class="num">50</span>, label=<span class="st">""</span>):
+    <span class="cm">"""Benchmark profesional: warmup + múltiples runs + estadísticas."""</span>
+
+    <span class="cm"># 1. WARMUP: compilar + estabilizar cache</span>
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(n_warmup):
+        func(*args)
+
+    <span class="cm"># 2. MEDIR: múltiples ejecuciones</span>
+    times = []
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(n_runs):
+        start = time.perf_counter()  <span class="cm"># ← perf_counter, NO time.time()</span>
+        result = func(*args)
+        elapsed = time.perf_counter() - start
+        times.append(elapsed)
+
+    <span class="cm"># 3. ANALIZAR: no solo la media</span>
+    times = np.array(times)
+    <span class="fn">print</span>(f<span class="st">"{'─'*50}"</span>)
+    <span class="fn">print</span>(f<span class="st">"  {label or func.__name__}"</span>)
+    <span class="fn">print</span>(f<span class="st">"{'─'*50}"</span>)
+    <span class="fn">print</span>(f<span class="st">"  Mediana:   {np.median(times)*1000:10.3f} ms"</span>)  <span class="cm"># ← MEDIANA, no media</span>
+    <span class="fn">print</span>(f<span class="st">"  Media:     {np.mean(times)*1000:10.3f} ms"</span>)
+    <span class="fn">print</span>(f<span class="st">"  Min:       {np.min(times)*1000:10.3f} ms"</span>)  <span class="cm"># ← mejor caso real</span>
+    <span class="fn">print</span>(f<span class="st">"  Max:       {np.max(times)*1000:10.3f} ms"</span>)
+    <span class="fn">print</span>(f<span class="st">"  Std:       {np.std(times)*1000:10.3f} ms"</span>)
+    <span class="fn">print</span>(f<span class="st">"  Runs:      {n_runs}"</span>)
+    <span class="fn">print</span>()
+    <span class="kw">return</span> np.median(times)
+
+<span class="cm"># USO:</span>
+data = np.random.rand(<span class="num">10_000_000</span>)
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">version_a</span>(x):
+    <span class="kw">return</span> np.sum(np.sqrt(x))
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">version_b</span>(x):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="fn">len</span>(x)):
+        total += np.sqrt(x[i])
+    <span class="kw">return</span> total
+
+t_a = benchmark(version_a, data, label=<span class="st">"@njit básico"</span>)
+t_b = benchmark(version_b, data, label=<span class="st">"@njit parallel+fastmath"</span>)
+t_np = benchmark(np.sum, np.sqrt(data), label=<span class="st">"NumPy puro"</span>)
+
+<span class="fn">print</span>(f<span class="st">"Speedup B vs A: {t_a/t_b:.1f}x"</span>)
+<span class="fn">print</span>(f<span class="st">"Speedup B vs NumPy: {t_np/t_b:.1f}x"</span>)</code></pre>
+
+    <h4>¿Por qué mediana y no media?</h4>
+    <p>Porque los outliers de tiempo alto (causados por garbage collection, interrupciones del OS, context switches) distorsionan la media. La mediana te dice "en la mitad de los casos tardó menos que X" — mucho más representativo del rendimiento real.</p>
+
+    <h4>¿Por qué <code>time.perf_counter()</code> y no <code>time.time()</code>?</h4>
+    <p><code>perf_counter</code> usa el reloj monotónico de mayor resolución disponible en el sistema (nanosegundos). <code>time.time()</code> puede tener resolución de milisegundos y es afectado por ajustes del reloj del sistema.</p>
+
+    <!-- ============ MEDIR COMPILACIÓN ============ -->
+    <h3>⏱️ Medir el tiempo de compilación por separado</h3>
+
+    <p>A veces necesitas saber cuánto tarda Numba en compilar (para decidir si usar <code>cache=True</code>):</p>
+
+<pre><code><span class="kw">def</span> <span class="fn">benchmark_compilation</span>(func, *args):
+    <span class="cm">"""Mide el tiempo de compilación vs ejecución por separado."""</span>
+
+    <span class="cm"># Forzar recompilación</span>
+    func.recompile()  <span class="cm"># Limpia todas las especializaciones</span>
+
+    <span class="cm"># Medir primera llamada (compilación + ejecución)</span>
+    start = time.perf_counter()
+    func(*args)
+    first_call = time.perf_counter() - start
+
+    <span class="cm"># Medir segunda llamada (solo ejecución)</span>
+    start = time.perf_counter()
+    func(*args)
+    second_call = time.perf_counter() - start
+
+    compilation = first_call - second_call
+
+    <span class="fn">print</span>(f<span class="st">"Compilación:  {compilation*1000:.1f} ms"</span>)
+    <span class="fn">print</span>(f<span class="st">"Ejecución:    {second_call*1000:.3f} ms"</span>)
+    <span class="fn">print</span>(f<span class="st">"Ratio:        compilación es {compilation/second_call:.0f}x la ejecución"</span>)
+
+    <span class="cm"># Si la ratio es > 1000, cache=True es casi obligatorio</span>
+    <span class="kw">if</span> compilation / max(second_call, <span class="num">1e-9</span>) > <span class="num">1000</span>:
+        <span class="fn">print</span>(<span class="st">"  → RECOMENDACIÓN: usa cache=True"</span>)</code></pre>
+
+    <!-- ============ SCALING TEST ============ -->
+    <h3>📈 Scaling test: ¿tu optimización escala?</h3>
+
+    <p>Un benchmark con un solo tamaño de datos es incompleto. Las optimizaciones se comportan diferente según la escala:</p>
+
+<pre><code><span class="kw">def</span> <span class="fn">scaling_test</span>(funcs, sizes, labels=<span class="num">None</span>, gen_data=<span class="num">None</span>):
+    <span class="cm">"""Compara funciones en múltiples tamaños de datos.
+    Revela si una optimización escala o tiene overhead fijo."""</span>
+
+    <span class="kw">if</span> gen_data <span class="kw">is</span> <span class="num">None</span>:
+        gen_data = <span class="kw">lambda</span> n: np.random.rand(n)
+    <span class="kw">if</span> labels <span class="kw">is</span> <span class="num">None</span>:
+        labels = [f.__name__ <span class="kw">for</span> f <span class="kw">in</span> funcs]
+
+    <span class="cm"># Warmup todas las funciones con el tamaño más pequeño</span>
+    small_data = gen_data(sizes[<span class="num">0</span>])
+    <span class="kw">for</span> func <span class="kw">in</span> funcs:
+        func(small_data)
+
+    <span class="fn">print</span>(f<span class="st">"\n{'Tamaño':>12}"</span>, end=<span class="st">""</span>)
+    <span class="kw">for</span> label <span class="kw">in</span> labels:
+        <span class="fn">print</span>(f<span class="st">"{label:>15}"</span>, end=<span class="st">""</span>)
+    <span class="fn">print</span>(f<span class="st">"{'Speedup':>12}"</span>)
+    <span class="fn">print</span>(<span class="st">"─"</span> * (<span class="num">12</span> + <span class="num">15</span> * <span class="fn">len</span>(funcs) + <span class="num">12</span>))
+
+    <span class="kw">for</span> size <span class="kw">in</span> sizes:
+        data = gen_data(size)
+        times = []
+        <span class="kw">for</span> func <span class="kw">in</span> funcs:
+            t = []
+            <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(<span class="num">20</span>):
+                start = time.perf_counter()
+                func(data)
+                t.append(time.perf_counter() - start)
+            times.append(np.median(t))
+
+        <span class="fn">print</span>(f<span class="st">"{size:>12,}"</span>, end=<span class="st">""</span>)
+        <span class="kw">for</span> t <span class="kw">in</span> times:
+            <span class="fn">print</span>(f<span class="st">"{t*1000:>14.3f}ms"</span>, end=<span class="st">""</span>)
+        speedup = times[<span class="num">0</span>] / times[<span class="num">-1</span>] <span class="kw">if</span> times[<span class="num">-1</span>] > <span class="num">0</span> <span class="kw">else</span> float(<span class="st">'inf'</span>)
+        <span class="fn">print</span>(f<span class="st">"{speedup:>11.1f}x"</span>)
+
+<span class="cm"># Uso:</span>
+scaling_test(
+    funcs=[version_a, version_b],
+    sizes=[<span class="num">1_000</span>, <span class="num">10_000</span>, <span class="num">100_000</span>, <span class="num">1_000_000</span>, <span class="num">10_000_000</span>],
+    labels=[<span class="st">"njit"</span>, <span class="st">"parallel+fast"</span>]
+)
+
+<span class="cm"># Output típico:</span>
+<span class="cm">#      Tamaño           njit  parallel+fast     Speedup</span>
+<span class="cm"># ─────────────────────────────────────────────────────</span>
+<span class="cm">#        1,000        0.002ms        0.045ms       0.0x  ← parallel PIERDE en datos chicos</span>
+<span class="cm">#       10,000        0.012ms        0.048ms       0.3x  ← todavía pierde</span>
+<span class="cm">#      100,000        0.108ms        0.065ms       1.7x  ← empieza a ganar</span>
+<span class="cm">#    1,000,000        1.052ms        0.342ms       3.1x  ← gana claramente</span>
+<span class="cm">#   10,000,000       10.891ms        2.187ms       5.0x  ← domina</span></code></pre>
+
+    <div class="info">
+      Este test revela algo crucial: <code>parallel=True</code> tiene un overhead fijo de ~0.04ms por crear el thread pool. Con datos pequeños (<10K), ese overhead domina y la versión paralela es MÁS LENTA. Con datos grandes, el overhead es insignificante y la paralelización domina. <strong>Sin un scaling test, nunca verías esto.</strong>
+    </div>
+
+    <!-- ============ THROUGHPUT ============ -->
+    <h3>📊 Medir throughput, no solo tiempo</h3>
+
+    <p>El tiempo absoluto no te dice si tu código está cerca del límite teórico. El throughput (GB/s procesados) sí:</p>
+
+<pre><code><span class="kw">def</span> <span class="fn">benchmark_throughput</span>(func, data, n_runs=<span class="num">50</span>, label=<span class="st">""</span>):
+    <span class="cm">"""Mide throughput en GB/s para saber si estás cerca del límite de memoria."""</span>
+
+    <span class="cm"># Warmup</span>
+    func(data)
+    func(data)
+
+    <span class="cm"># Medir</span>
+    times = []
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(n_runs):
+        start = time.perf_counter()
+        func(data)
+        times.append(time.perf_counter() - start)
+
+    median_time = np.median(times)
+    data_bytes = data.nbytes
+    throughput_gbs = (data_bytes / median_time) / <span class="num">1e9</span>
+
+    <span class="fn">print</span>(f<span class="st">"{label:30s} | {median_time*1000:8.3f} ms | {throughput_gbs:6.1f} GB/s"</span>)
+
+    <span class="cm"># Referencia: bandwidth de RAM típica</span>
+    <span class="cm"># DDR4-3200: ~25 GB/s por canal, ~50 GB/s dual channel</span>
+    <span class="cm"># DDR5-5600: ~45 GB/s por canal, ~90 GB/s dual channel</span>
+    <span class="cm"># Si tu throughput está cerca de estos números, estás</span>
+    <span class="cm"># MEMORY BOUND y optimizar la CPU no ayudará más.</span>
+    <span class="cm"># La única forma de ir más rápido es reducir los datos</span>
+    <span class="cm"># que necesitas leer (mejor layout, menos temporales, etc.)</span>
+
+<span class="cm"># Uso:</span>
+data = np.random.rand(<span class="num">50_000_000</span>)  <span class="cm"># ~400MB</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">just_sum</span>(x):
+    <span class="kw">return</span> np.sum(x)
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">par_sum</span>(x):
+    <span class="kw">return</span> np.sum(x)
+
+benchmark_throughput(just_sum, data, label=<span class="st">"np.sum @njit"</span>)
+benchmark_throughput(par_sum, data, label=<span class="st">"np.sum @njit parallel"</span>)
+benchmark_throughput(np.sum, data, label=<span class="st">"np.sum NumPy puro"</span>)
+
+<span class="cm"># Output típico:</span>
+<span class="cm"># np.sum @njit                  |   17.234 ms |  23.2 GB/s</span>
+<span class="cm"># np.sum @njit parallel         |    4.891 ms |  81.8 GB/s  ← cerca del límite de RAM</span>
+<span class="cm"># np.sum NumPy puro             |   18.103 ms |  22.1 GB/s</span>
+<span class="cm">#</span>
+<span class="cm"># La versión parallel a 81.8 GB/s está CERCA del límite de DDR5 (~90 GB/s)</span>
+<span class="cm"># No va a ir más rápido sin importar qué hagas en código.</span>
+<span class="cm"># ¡Estás memory-bound! La CPU está esperando datos de RAM.</span></code></pre>
+
+    <div class="perf">
+      <strong>Si tu throughput se acerca al bandwidth de tu RAM, estás memory-bound.</strong> Ninguna optimización de CPU (fastmath, SVML, mejor algoritmo) te va a ayudar. La única salida es reducir la cantidad de datos que lees: fusionar operaciones (un solo pass en vez de múltiples), usar tipos más pequeños (float32 en vez de float64 duplica tu throughput efectivo), o reestructurar datos (SoA).
+    </div>
+
+    <!-- ============ DIAGNOSTICS ============ -->
+    <h3>🔍 Verificar qué hizo Numba realmente</h3>
+
+    <p>No asumas que Numba hizo lo que esperabas. <strong>Verifica.</strong></p>
+
+<pre><code><span class="dec">@njit</span>(parallel=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">mi_funcion</span>(x):
+    n = x.shape[<span class="num">0</span>]
+    a = np.sin(x)
+    b = np.cos(a * a)
+    acc = <span class="num">0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> prange(n - <span class="num">2</span>):
+        <span class="kw">for</span> j <span class="kw">in</span> prange(n - <span class="num">1</span>):
+            acc += b[i] + b[j + <span class="num">1</span>]
+    <span class="kw">return</span> acc
+
+<span class="cm"># Forzar compilación</span>
+mi_funcion(np.arange(<span class="num">10</span>, dtype=np.float64))
+
+<span class="cm"># ─── HERRAMIENTA 1: inspect_types() ───</span>
+<span class="cm"># Muestra qué tipo infirió Numba para CADA variable</span>
+mi_funcion.inspect_types()
+<span class="cm"># Busca sorpresas: ¿una variable es float64 cuando esperabas int?</span>
+<span class="cm"># ¿Un array es 'A' (any layout) cuando debería ser 'C'?</span>
+
+<span class="cm"># ─── HERRAMIENTA 2: parallel_diagnostics() ───</span>
+<span class="cm"># Muestra qué se paralelizó, qué se fusionó, y qué NO</span>
+mi_funcion.parallel_diagnostics(level=<span class="num">4</span>)
+<span class="cm"># Nivel 1: resumen básico</span>
+<span class="cm"># Nivel 2: + info de fusión de loops</span>
+<span class="cm"># Nivel 3: + estructura antes/después de optimización</span>
+<span class="cm"># Nivel 4: + hoisting de código + instrucciones</span>
+
+<span class="cm"># ─── HERRAMIENTA 3: inspect_llvm() ───</span>
+<span class="cm"># Para expertos: el código LLVM IR generado</span>
+llvm_ir = mi_funcion.inspect_llvm(mi_funcion.signatures[<span class="num">0</span>])
+<span class="cm"># Buscar: "vector.body" → LLVM vectorizó el loop (SIMD)</span>
+<span class="cm"># Buscar: "llvm.sqrt.v4f64" → está usando SIMD de 4 doubles</span>
+<span class="cm"># Buscar: "svml" → está usando Intel SVML</span>
+<span class="kw">if</span> <span class="st">'svml'</span> <span class="kw">in</span> llvm_ir.lower():
+    <span class="fn">print</span>(<span class="st">"✅ SVML activo"</span>)
+<span class="kw">else</span>:
+    <span class="fn">print</span>(<span class="st">"⚠️ SVML NO detectado — instala intel-cmplr-lib-rt"</span>)
+
+<span class="cm"># ─── HERRAMIENTA 4: inspect_asm() ───</span>
+<span class="cm"># Para ultra-expertos: el assembly nativo generado</span>
+asm = mi_funcion.inspect_asm(mi_funcion.signatures[<span class="num">0</span>])
+<span class="cm"># Buscar: "vmulpd" / "vaddpd" → instrucciones AVX (256-bit SIMD)</span>
+<span class="cm"># Buscar: "zmm" → instrucciones AVX-512 (512-bit SIMD)</span>
+
+<span class="cm"># ─── HERRAMIENTA 5: debug de vectorización LLVM ───</span>
+<span class="kw">import</span> llvmlite.binding <span class="kw">as</span> llvm
+llvm.set_option(<span class="st">''</span>, <span class="st">'--debug-only=loop-vectorize'</span>)
+<span class="cm"># NOTA: requiere LLVM con assertions (build de desarrollo)</span>
+<span class="cm"># Mensajes comunes:</span>
+<span class="cm"># "LV: Vectorization is possible but not beneficial" → el loop es muy corto</span>
+<span class="cm"># "LV: Can't vectorize due to memory conflicts" → acceso no contiguo</span>
+<span class="cm"># "LV: Not vectorizing: loop did not meet vectorization requirements" → dependencia</span></code></pre>
+
+    <!-- ============ COMPARAR CONTRA NUMPY ============ -->
+    <h3>⚖️ Comparar contra NumPy de forma justa</h3>
+
+<pre><code><span class="cm"># ERROR MUY COMÚN: comparar operaciones diferentes</span>
+
+data = np.random.rand(<span class="num">1_000_000</span>)
+
+<span class="cm"># Esto NO es una comparación justa:</span>
+<span class="cm"># NumPy:</span>
+result_np = np.sum(np.sqrt(data))   <span class="cm"># crea array temporal de sqrt</span>
+
+<span class="cm"># Numba:</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">fused</span>(x):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(x)):
+        total += np.sqrt(x[i])  <span class="cm"># sin array temporal</span>
+    <span class="kw">return</span> total
+<span class="cm"># La versión Numba es más rápida EN PARTE porque evita el temporal,</span>
+<span class="cm"># no solo por la compilación JIT.</span>
+
+<span class="cm"># COMPARACIÓN JUSTA: misma operación, mismo patrón de memoria</span>
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">numba_same_as_numpy</span>(x):
+    <span class="kw">return</span> np.sum(np.sqrt(x))  <span class="cm"># misma operación que NumPy</span>
+
+<span class="dec">@njit</span>
+<span class="kw">def</span> <span class="fn">numba_fused</span>(x):
+    total = <span class="num">0.0</span>
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(x)):
+        total += np.sqrt(x[i])
+    <span class="kw">return</span> total
+
+<span class="cm"># Ahora puedes decir:</span>
+<span class="cm"># "Numba sin fusión (misma operación que NumPy): 1.2x más rápido"</span>
+<span class="cm"># "Numba CON fusión de loops: 3.5x más rápido"</span>
+<span class="cm"># "De ese 3.5x, 1.2x viene de JIT y 2.9x viene de eliminar temporales"</span></code></pre>
+
+    <!-- ============ FLOAT32 ============ -->
+    <h3>🔢 Truco nuclear: float32 en vez de float64</h3>
+
+<pre><code><span class="cm"># Cambiar de float64 a float32 tiene TRES beneficios simultáneos:</span>
+<span class="cm"># 1. La mitad de bytes → el doble de datos caben en cache</span>
+<span class="cm"># 2. La mitad de bytes → el doble de throughput de memoria</span>
+<span class="cm"># 3. SIMD procesa el doble de elementos por instrucción</span>
+<span class="cm">#    (8 float32 vs 4 float64 en AVX-256)</span>
+
+data64 = np.random.rand(<span class="num">10_000_000</span>).astype(np.float64)  <span class="cm"># 80 MB</span>
+data32 = data64.astype(np.float32)                        <span class="cm"># 40 MB</span>
+
+<span class="dec">@njit</span>(parallel=<span class="num">True</span>, fastmath=<span class="num">True</span>)
+<span class="kw">def</span> <span class="fn">process</span>(x):
+    result = np.empty_like(x)
+    <span class="kw">for</span> i <span class="kw">in</span> prange(<span class="fn">len</span>(x)):
+        result[i] = np.sin(x[i]) ** <span class="num">2</span> + np.cos(x[i]) ** <span class="num">2</span>
+    <span class="kw">return</span> result
+
+benchmark(process, data64, label=<span class="st">"float64 (80MB)"</span>)
+benchmark(process, data32, label=<span class="st">"float32 (40MB)"</span>)
+
+<span class="cm"># Resultado típico:</span>
+<span class="cm"># float64:  12.3ms</span>
+<span class="cm"># float32:   4.1ms → 3x más rápido con ~7 dígitos de precisión (vs ~15)</span>
+
+<span class="cm"># ¿Cuándo es aceptable float32?</span>
+<span class="cm"># ✅ Machine Learning (pesos, activaciones, gradientes)</span>
+<span class="cm"># ✅ Procesamiento de señales e imágenes</span>
+<span class="cm"># ✅ Simulaciones donde 7 dígitos bastan</span>
+<span class="cm"># ✅ Visualización y gráficos</span>
+<span class="cm"># ❌ Cálculos financieros precisos</span>
+<span class="cm"># ❌ Álgebra lineal con matrices mal condicionadas</span>
+<span class="cm"># ❌ Acumulación de sumas muy largas (error se acumula)</span></code></pre>
+
+    <!-- ============ CHECKLIST FINAL ============ -->
+    <h3>📋 Checklist de benchmarking</h3>
+    <table>
+      <tr><th>#</th><th>Verificar</th><th>Si no lo haces...</th></tr>
+      <tr><td>1</td><td>¿Hice warmup antes de medir?</td><td>Mides compilación, no ejecución</td></tr>
+      <tr><td>2</td><td>¿Uso <code>time.perf_counter()</code>?</td><td>Resolución insuficiente para funciones rápidas</td></tr>
+      <tr><td>3</td><td>¿Múltiples ejecuciones + mediana?</td><td>GC y OS noise distorsionan un solo run</td></tr>
+      <tr><td>4</td><td>¿Probé con múltiples tamaños de datos?</td><td>Tu "optimización" puede ser más lenta para datos reales</td></tr>
+      <tr><td>5</td><td>¿Verifiqué throughput en GB/s?</td><td>Podrías estar optimizando CPU cuando estás memory-bound</td></tr>
+      <tr><td>6</td><td>¿Comparé operaciones equivalentes?</td><td>Speedup falso por comparar cosas diferentes</td></tr>
+      <tr><td>7</td><td>¿Revisé <code>parallel_diagnostics()</code>?</td><td>parallel=True podría no estar haciendo nada</td></tr>
+      <tr><td>8</td><td>¿Verifiqué que SVML está activo?</td><td>Podrías estar a 3x del rendimiento óptimo sin saberlo</td></tr>
+      <tr><td>9</td><td>¿Probé float32 vs float64?</td><td>Posible 2-3x gratis si la precisión no es crítica</td></tr>
+    </table>
+
+  </div>
+</div>
         
 <!--
   ============================================================
