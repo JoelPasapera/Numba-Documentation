@@ -216,7 +216,7 @@
     <span class="arrow">▶</span>
   </div>
   <div class="module-body">
-    <p>Numba es un compilador <strong>JIT (Just-In-Time)</strong> para Python que traduce funciones Python a código máquina nativo usando LLVM. Funciona mejor con código numérico que usa arrays NumPy y loops.</p>
+    <p>Numba es un compilador <strong>JIT (Just-In-Time)</strong> para Python que traduce funciones Python a código máquina nativo usando LLVM. Funciona mejor con código numérico que usa arrays NumPy y loops. Imagina que tienes un loop que procesa 100 millones de datos y tarda 15 segundos en Python puro; con Numba, agregas @njit encima de tu función y baja a 0.05 segundos. Es especialmente brutal en cálculos numéricos masivos (simulaciones, procesamiento de señales, machine learning, y trading algorítmico) donde millones de operaciones por segundo marcan la diferencia entre una estrategia viable y una idea teórica</p>
 
     <h3>¿Cómo funciona internamente?</h3>
     <p>Cuando decoras una función con <code>@jit</code>, Numba hace lo siguiente:</p>
