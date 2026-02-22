@@ -3294,7 +3294,7 @@ raw_data[outlier_mask] *= <span class="num">100</span>
     <h3 style="color: #f85149;">☠️ #1 — Llamar una función parallel=True dentro de un loop</h3>
     <p><strong>Severidad: CATASTRÓFICA</strong> | <strong>Frecuencia: MUY ALTA</strong></p>
 
-    <p>Este es el anti-pattern más devastador y más común. Parece completamente inocente:</p>
+    <p>Este es el anti-pattern más devastador y más común. Debido al overhead de dispatch (~1μs × millones de llamadas). Parece completamente inocente:</p>
 
 <pre><code><span class="cm"># ☠️ TRAMPA: parallel=True DENTRO de un loop Python que itera millones de veces</span>
 <span class="dec">@njit</span>(parallel=<span class="num">True</span>)
@@ -3402,7 +3402,7 @@ results = process_all_rows(data)
     <h3 style="color: #f85149;">☠️ #3 — parallel=True silenciosamente no hizo nada</h3>
     <p><strong>Severidad: ALTA</strong> | <strong>Frecuencia: ALTA</strong></p>
 
-    <p>Este es el más traicionero: tu código compila, ejecuta, produce resultados correctos... pero <code>parallel=True</code> no paralelizó absolutamente nada. Usas 1 core de 8 sin saberlo.</p>
+    <p>Este es el más traicionero: tu código compila, ejecuta, produce resultados correctos... pero <code>parallel=True</code> no paralelizó absolutamente nada. Usas 1 core de 8 sin saberlo. ¿Y sabes por qué? porque Numba no avisa cuando falla la paralelización...</p>
 
 <pre><code><span class="cm"># ☠️ TRAMPA 3A: usar range() en vez de prange()</span>
 <span class="dec">@njit</span>(parallel=<span class="num">True</span>)
@@ -3479,7 +3479,7 @@ trap_range.parallel_diagnostics(level=<span class="num">1</span>)
     <h3 style="color: #f85149;">☠️ #4 — Race conditions silenciosas en arrays</h3>
     <p><strong>Severidad: CATASTRÓFICA</strong> | <strong>Frecuencia: MEDIA</strong></p>
 
-    <p>Numba NO detecta race conditions en la mayoría de los casos. Tu código da resultados diferentes cada vez que lo ejecutas, y puedes no notarlo si la diferencia es pequeña.</p>
+    <p>Numba NO detecta race conditions en arrays en la mayoría de los casos. Tu código da resultados diferentes cada vez que lo ejecutas, y puedes no notarlo si la diferencia es pequeña. Esto en sistemas donde la precisión y exactitud son críticas, sería un desastre.</p>
 
 <pre><code><span class="cm"># ☠️ TRAMPA: múltiples threads escriben al MISMO elemento</span>
 <span class="dec">@njit</span>(parallel=<span class="num">True</span>)
@@ -3864,6 +3864,7 @@ col_major = matrix_view.T                    <span class="cm"># ☠️ F-contigu
 <span class="cm"># ✅ Forzar contigüidad cuando sea necesario:</span>
 safe_data = np.ascontiguousarray(col_major)  <span class="cm"># copia a C-contiguous</span></code></pre>
 
+<span class="cm"># ✅ Identifica que slices y transposes destruyen performance</span>
     <!-- ============ RESUMEN ============ -->
     <h3>📊 Clasificación de severidad</h3>
 
