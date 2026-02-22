@@ -1205,7 +1205,7 @@ transposed = arr.T
     <span class="cm"># Total: 0 bytes de temporales. Solo input + output.</span>
 
 <span class="cm"># Con 10M elementos:</span>
-<span class="cm"># numpy_style:  ~650ms (memory bandwidth limited)</span>
+<span class="cm"># numpy_style:  ~650ms (memory Bandwidth (Ancho de banda) limited)</span>
 <span class="cm"># numba_fused:  ~180ms (compute limited — que es lo que queremos)</span></code></pre>
 
     <div class="perf">
@@ -1617,13 +1617,13 @@ scaling_test(
       Este test revela algo crucial: <code>parallel=True</code> tiene un overhead fijo de ~0.04ms por crear el thread pool. Con datos pequeños (<10K), ese overhead domina y la versión paralela es MÁS LENTA. Con datos grandes, el overhead es insignificante y la paralelización domina. <strong>Sin un scaling test, nunca verías esto.</strong>
     </div>
 
-    <!-- ============ THROUGHPUT ============ -->
-    <h3>📊 Medir throughput, no solo tiempo</h3>
+    <!-- ============ Throughput (Rendimiento real) ============ -->
+    <h3>📊 Medir Throughput (Rendimiento real), no solo tiempo</h3>
 
-    <p>El tiempo absoluto no te dice si tu código está cerca del límite teórico. El throughput (GB/s procesados) sí:</p>
+    <p>El tiempo absoluto no te dice si tu código está cerca del límite teórico. El Throughput (Rendimiento real) (GB/s procesados) sí:</p>
 
-<pre><code><span class="kw">def</span> <span class="fn">benchmark_throughput</span>(func, data, n_runs=<span class="num">50</span>, label=<span class="st">""</span>):
-    <span class="cm">"""Mide throughput en GB/s para saber si estás cerca del límite de memoria."""</span>
+<pre><code><span class="kw">def</span> <span class="fn">benchmark_Throughput (Rendimiento real)</span>(func, data, n_runs=<span class="num">50</span>, label=<span class="st">""</span>):
+    <span class="cm">"""Mide Throughput (Rendimiento real) en GB/s para saber si estás cerca del límite de memoria."""</span>
 
     <span class="cm"># Warmup</span>
     func(data)
@@ -1638,14 +1638,14 @@ scaling_test(
 
     median_time = np.median(times)
     data_bytes = data.nbytes
-    throughput_gbs = (data_bytes / median_time) / <span class="num">1e9</span>
+    Throughput (Rendimiento real)_gbs = (data_bytes / median_time) / <span class="num">1e9</span>
 
-    <span class="fn">print</span>(f<span class="st">"{label:30s} | {median_time*1000:8.3f} ms | {throughput_gbs:6.1f} GB/s"</span>)
+    <span class="fn">print</span>(f<span class="st">"{label:30s} | {median_time*1000:8.3f} ms | {Throughput (Rendimiento real)_gbs:6.1f} GB/s"</span>)
 
-    <span class="cm"># Referencia: bandwidth de RAM típica</span>
+    <span class="cm"># Referencia: Bandwidth (Ancho de banda) de RAM típica</span>
     <span class="cm"># DDR4-3200: ~25 GB/s por canal, ~50 GB/s dual channel</span>
     <span class="cm"># DDR5-5600: ~45 GB/s por canal, ~90 GB/s dual channel</span>
-    <span class="cm"># Si tu throughput está cerca de estos números, estás</span>
+    <span class="cm"># Si tu Throughput (Rendimiento real) está cerca de estos números, estás</span>
     <span class="cm"># MEMORY BOUND y optimizar la CPU no ayudará más.</span>
     <span class="cm"># La única forma de ir más rápido es reducir los datos</span>
     <span class="cm"># que necesitas leer (mejor layout, menos temporales, etc.)</span>
@@ -1661,9 +1661,9 @@ data = np.random.rand(<span class="num">50_000_000</span>)  <span class="cm"># ~
 <span class="kw">def</span> <span class="fn">par_sum</span>(x):
     <span class="kw">return</span> np.sum(x)
 
-benchmark_throughput(just_sum, data, label=<span class="st">"np.sum @njit"</span>)
-benchmark_throughput(par_sum, data, label=<span class="st">"np.sum @njit parallel"</span>)
-benchmark_throughput(np.sum, data, label=<span class="st">"np.sum NumPy puro"</span>)
+benchmark_Throughput (Rendimiento real)(just_sum, data, label=<span class="st">"np.sum @njit"</span>)
+benchmark_Throughput (Rendimiento real)(par_sum, data, label=<span class="st">"np.sum @njit parallel"</span>)
+benchmark_Throughput (Rendimiento real)(np.sum, data, label=<span class="st">"np.sum NumPy puro"</span>)
 
 <span class="cm"># Output típico:</span>
 <span class="cm"># np.sum @njit                  |   17.234 ms |  23.2 GB/s</span>
@@ -1675,7 +1675,7 @@ benchmark_throughput(np.sum, data, label=<span class="st">"np.sum NumPy puro"</s
 <span class="cm"># ¡Estás memory-bound! La CPU está esperando datos de RAM.</span></code></pre>
 
     <div class="perf">
-      <strong>Si tu throughput se acerca al bandwidth de tu RAM, estás memory-bound.</strong> Ninguna optimización de CPU (fastmath, SVML, mejor algoritmo) te va a ayudar. La única salida es reducir la cantidad de datos que lees: fusionar operaciones (un solo pass en vez de múltiples), usar tipos más pequeños (float32 en vez de float64 duplica tu throughput efectivo), o reestructurar datos (SoA).
+      <strong>Si tu Throughput (Rendimiento real) se acerca al Bandwidth (Ancho de banda) de tu RAM, estás memory-bound.  La mayoría de los programadores optimizan loops cuando el cuello de botella es el bus de memoria.</strong> Ninguna optimización de CPU (fastmath, SVML, mejor algoritmo) te va a ayudar. La única salida es reducir la cantidad de datos que lees: fusionar operaciones (un solo pass en vez de múltiples), usar tipos más pequeños (float32 en vez de float64 duplica tu Throughput (Rendimiento real) efectivo), o reestructurar datos (SoA).
     </div>
 
     <!-- ============ DIAGNOSTICS ============ -->
@@ -1780,7 +1780,7 @@ result_np = np.sum(np.sqrt(data))   <span class="cm"># crea array temporal de sq
 
 <pre><code><span class="cm"># Cambiar de float64 a float32 tiene TRES beneficios simultáneos:</span>
 <span class="cm"># 1. La mitad de bytes → el doble de datos caben en cache</span>
-<span class="cm"># 2. La mitad de bytes → el doble de throughput de memoria</span>
+<span class="cm"># 2. La mitad de bytes → el doble de Throughput (Rendimiento real) de memoria</span>
 <span class="cm"># 3. SIMD procesa el doble de elementos por instrucción</span>
 <span class="cm">#    (8 float32 vs 4 float64 en AVX-256)</span>
 
@@ -1818,7 +1818,7 @@ benchmark(process, data32, label=<span class="st">"float32 (40MB)"</span>)
       <tr><td>2</td><td>¿Uso <code>time.perf_counter()</code>?</td><td>Resolución insuficiente para funciones rápidas</td></tr>
       <tr><td>3</td><td>¿Múltiples ejecuciones + mediana?</td><td>GC y OS noise distorsionan un solo run</td></tr>
       <tr><td>4</td><td>¿Probé con múltiples tamaños de datos?</td><td>Tu "optimización" puede ser más lenta para datos reales</td></tr>
-      <tr><td>5</td><td>¿Verifiqué throughput en GB/s?</td><td>Podrías estar optimizando CPU cuando estás memory-bound</td></tr>
+      <tr><td>5</td><td>¿Verifiqué Throughput (Rendimiento real) en GB/s?</td><td>Podrías estar optimizando CPU cuando estás memory-bound</td></tr>
       <tr><td>6</td><td>¿Comparé operaciones equivalentes?</td><td>Speedup falso por comparar cosas diferentes</td></tr>
       <tr><td>7</td><td>¿Revisé <code>parallel_diagnostics()</code>?</td><td>parallel=True podría no estar haciendo nada</td></tr>
       <tr><td>8</td><td>¿Verifiqué que SVML está activo?</td><td>Podrías estar a 3x del rendimiento óptimo sin saberlo</td></tr>
@@ -2432,7 +2432,7 @@ mean, std, vmin, vmax, count = massive_stats(data)
 elapsed = time.perf_counter() - start
 
 <span class="fn">print</span>(f<span class="st">"100M elementos en {elapsed*1000:.1f}ms"</span>)
-<span class="fn">print</span>(f<span class="st">"Throughput: {data.nbytes / elapsed / 1e9:.1f} GB/s"</span>)
+<span class="fn">print</span>(f<span class="st">"Throughput (Rendimiento real): {data.nbytes / elapsed / 1e9:.1f} GB/s"</span>)
 <span class="fn">print</span>(f<span class="st">"Mean={mean:.6f}, Std={std:.6f}, Min={vmin:.4f}, Max={vmax:.4f}"</span>)</code></pre>
 
     <div class="perf">
@@ -3257,17 +3257,17 @@ raw_data[outlier_mask] *= <span class="num">100</span>
       <tr><td>7</td><td><strong>float32 cuando la precisión lo permite</strong></td><td>2-3x (memoria + SIMD)</td><td>Caso 2 (V3), Caso 4 (V1)</td></tr>
       <tr><td>8</td><td><strong>Histogramas thread-local → reduce</strong> (evitar locks)</td><td>Nx sin race conditions</td><td>Caso 1 (V3)</td></tr>
       <tr><td>9</td><td><strong>Pre-sort para convertir acceso aleatorio en secuencial</strong></td><td>2-3x en lookups (amortizado)</td><td>Caso 3 (V3)</td></tr>
-      <tr><td>10</td><td><strong>Medir throughput (GB/s) para saber si estás memory-bound</strong></td><td>Evita optimizar CPU cuando el límite es RAM</td><td>Todos</td></tr>
+      <tr><td>10</td><td><strong>Medir Throughput (Rendimiento real) (GB/s) para saber si estás memory-bound</strong></td><td>Evita optimizar CPU cuando el límite es RAM</td><td>Todos</td></tr>
     </table>
 
     <div class="tip">
       <strong>El proceso siempre es el mismo:</strong><br>
       1. Escribir versión correcta (aunque sea lenta)<br>
-      2. Medir (benchmark + throughput)<br>
+      2. Medir (benchmark + Throughput (Rendimiento real))<br>
       3. Identificar bottleneck (¿CPU-bound? ¿memory-bound? ¿algorítmico?)<br>
       4. Aplicar el principio correcto de la tabla<br>
       5. Medir de nuevo<br>
-      6. Repetir hasta llegar al límite teórico (bandwidth de RAM o pico de FLOPS)
+      6. Repetir hasta llegar al límite teórico (Bandwidth (Ancho de banda) de RAM o pico de FLOPS)
     </div>
 
   </div>
@@ -3880,7 +3880,7 @@ safe_data = np.ascontiguousarray(col_major)  <span class="cm"># copia a C-contig
       <tr><td>#9 Oversubscription</td><td>Más threads = más lento</td><td>2-5x más lento</td><td>htop, top</td></tr>
       <tr><td>#10 Dict como array</td><td>Lentitud en lookups</td><td>10-50x más lento</td><td>Benchmark vs array</td></tr>
       <tr><td>#11 parallel con datos chicos</td><td>Overhead domina</td><td>10-150x más lento</td><td>Scaling test</td></tr>
-      <tr><td>#12 Acceso no contiguo</td><td>Throughput bajo</td><td>3-10x más lento</td><td>arr.flags.c_contiguous</td></tr>
+      <tr><td>#12 Acceso no contiguo</td><td>Throughput (Rendimiento real) bajo</td><td>3-10x más lento</td><td>arr.flags.c_contiguous</td></tr>
     </table>
 
     <div class="tip">
@@ -6922,7 +6922,7 @@ def pipeline_hibrido(data):
    ├─ <span class="fn">Warm-up</span>         → Primera llamada con datos dummy para pre-compilar
    ├─ <span class="fn">Batch</span>           → Mover loops Python DENTRO de @njit (&gt;1K llamadas)
    ├─ <span class="fn">Pre-allocar</span>     → Pasar output como argumento, reutilizar buffers
-   ├─ <span class="fn">float32</span>         → Mitad de memoria, doble SIMD, doble throughput RAM
+   ├─ <span class="fn">float32</span>         → Mitad de memoria, doble SIMD, doble Throughput (Rendimiento real) RAM
    ├─ <span class="fn">C-order</span>         → Acceder última dimensión en loop interno (contiguo)
    └─ <span class="fn">Verificar</span>       → inspect_types(), parallel_diagnostics(4), inspect_llvm()</code></pre>
 
