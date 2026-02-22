@@ -203,6 +203,7 @@
       <div class="module-label">Experto</div>
       <a href="#m9">9. Extendiendo Numba (@overload, @intrinsic)</a>
       <a href="#m10">10. Cheatsheet y Patrones Comunes</a>
+      <a href="#m11">11. 🌳 Árbol de Decisión Interactivo</a>
     </div>
   </div>
 </div>
@@ -4758,6 +4759,2185 @@ cc.compile()  <span class="cm"># Genera my_module.so / my_module.pyd</span>
     </div>
   </div>
 </div>
+
+<!-- ==================== MÓDULO 11 ==================== -->
+<!-- ÁRBOL DE DECISIÓN INTERACTIVO NUMBA -->
+ 
+
+<div class="module" id="m11">
+  <div class="module-header" onclick="toggle(this)">
+    <h2><span class="num">11</span> 🌳 Árbol de Decisión Interactivo — ¿Qué decorador usar?</h2>
+    <span class="arrow">▶</span>
+  </div>
+  <div class="module-body">
+
+    <p>Este árbol de decisión interactivo te guía paso a paso para elegir el decorador y las opciones correctas de Numba según tu caso de uso. Responde las preguntas y obtén una recomendación fundamentada con código listo para usar.</p>
+
+    <div class="info">
+      <strong>Basado en el consenso:</strong> Este árbol fue construido contrastando la documentación oficial de Numba (Dec 2025), conocimiento empírico de la comunidad, y prácticas de ingeniería a escala. Cada recomendación incluye el <em>por qué</em>, no solo el <em>qué</em>.
+    </div>
+
+    <!-- ============================================ -->
+    <!-- ======= ESTILOS DEL ÁRBOL DE DECISIÓN ====== -->
+    <!-- ============================================ -->
+    <style>
+      /* ── Motor del árbol ── */
+      .dt-engine {
+        position: relative;
+        margin: 1.5rem 0;
+      }
+
+      /* ── Breadcrumb / ruta ── */
+      .dt-breadcrumb {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+        margin-bottom: 1.2rem;
+        padding: 0.6rem 1rem;
+        background: rgba(88,166,255,0.04);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 0.8rem;
+        color: var(--muted);
+        min-height: 2.4rem;
+      }
+      .dt-breadcrumb:empty::before {
+        content: "🌳 Comienza respondiendo la primera pregunta...";
+        color: var(--muted);
+        font-style: italic;
+      }
+      .dt-crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 2px 8px;
+        background: rgba(88,166,255,0.1);
+        border-radius: 4px;
+        color: var(--accent);
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .dt-crumb:hover {
+        background: rgba(88,166,255,0.2);
+      }
+      .dt-crumb-sep {
+        color: var(--border);
+        font-size: 0.7rem;
+      }
+
+      /* ── Tarjeta de pregunta ── */
+      .dt-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--surface);
+        animation: dtSlideIn 0.3s ease-out;
+        margin-bottom: 1rem;
+      }
+      @keyframes dtSlideIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .dt-card-header {
+        padding: 1rem 1.2rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      .dt-step-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        font-size: 0.75rem;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+      .dt-step-badge.q { background: rgba(88,166,255,0.15); color: var(--accent); }
+      .dt-step-badge.r { background: rgba(63,185,80,0.15); color: var(--accent2); }
+      .dt-question-text {
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+      .dt-card-body {
+        padding: 1rem 1.2rem;
+      }
+      .dt-context {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-bottom: 0.8rem;
+        line-height: 1.5;
+        padding: 0.6rem 0.8rem;
+        background: rgba(255,255,255,0.02);
+        border-radius: 6px;
+        border-left: 3px solid var(--border);
+      }
+
+      /* ── Opciones ── */
+      .dt-options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .dt-option {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.8rem;
+        padding: 0.8rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s;
+        background: transparent;
+        text-align: left;
+        color: var(--text);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        width: 100%;
+        font-family: inherit;
+      }
+      .dt-option:hover {
+        border-color: var(--accent);
+        background: rgba(88,166,255,0.05);
+      }
+      .dt-option.selected {
+        border-color: var(--accent);
+        background: rgba(88,166,255,0.08);
+      }
+      .dt-option-icon {
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .dt-option-content {
+        flex: 1;
+      }
+      .dt-option-label {
+        font-weight: 600;
+        display: block;
+        margin-bottom: 2px;
+      }
+      .dt-option-desc {
+        font-size: 0.82rem;
+        color: var(--muted);
+        display: block;
+      }
+
+      /* ── Resultado final ── */
+      .dt-result {
+        border: 2px solid var(--accent2);
+        border-radius: 12px;
+        overflow: hidden;
+        animation: dtSlideIn 0.35s ease-out;
+        margin-bottom: 1rem;
+      }
+      .dt-result-header {
+        background: rgba(63,185,80,0.1);
+        padding: 1rem 1.2rem;
+        border-bottom: 1px solid rgba(63,185,80,0.2);
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      .dt-result-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--accent2);
+      }
+      .dt-result-body {
+        padding: 1.2rem;
+        background: var(--surface);
+      }
+      .dt-result-decorator {
+        display: inline-block;
+        padding: 4px 14px;
+        border-radius: 6px;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 0.8rem;
+      }
+      .dt-result-decorator.njit { background: rgba(88,166,255,0.15); color: var(--accent); }
+      .dt-result-decorator.vectorize { background: rgba(63,185,80,0.15); color: var(--accent2); }
+      .dt-result-decorator.guvectorize { background: rgba(210,168,255,0.15); color: var(--accent3); }
+      .dt-result-decorator.stencil { background: rgba(240,136,62,0.15); color: var(--accent4); }
+      .dt-result-decorator.jitclass { background: rgba(248,81,73,0.15); color: var(--danger); }
+      .dt-result-decorator.cfunc { background: rgba(139,148,158,0.2); color: var(--muted); }
+      .dt-result-decorator.overload { background: rgba(88,166,255,0.15); color: var(--accent); }
+      .dt-result-decorator.objmode { background: rgba(240,136,62,0.15); color: var(--accent4); }
+      .dt-result-decorator.jit_module { background: rgba(210,168,255,0.15); color: var(--accent3); }
+
+      .dt-result-why {
+        margin: 0.8rem 0;
+        font-size: 0.9rem;
+        line-height: 1.6;
+      }
+      .dt-result-why strong {
+        color: var(--accent);
+      }
+
+      .dt-result-code {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem 1.2rem;
+        overflow-x: auto;
+        font-size: 0.85rem;
+        line-height: 1.6;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        margin: 0.8rem 0;
+        white-space: pre;
+      }
+
+      .dt-result-options {
+        margin-top: 0.8rem;
+        padding: 0.8rem;
+        background: rgba(240,136,62,0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(240,136,62,0.15);
+      }
+      .dt-result-options-title {
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: var(--accent4);
+        margin-bottom: 0.5rem;
+      }
+      .dt-result-option-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.4rem;
+        margin-bottom: 0.4rem;
+        font-size: 0.82rem;
+        line-height: 1.4;
+      }
+      .dt-result-option-row code {
+        background: rgba(88,166,255,0.1);
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-size: 0.8em;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+
+      .dt-pitfall {
+        margin-top: 0.8rem;
+        padding: 0.8rem;
+        background: rgba(248,81,73,0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(248,81,73,0.15);
+        font-size: 0.85rem;
+        line-height: 1.5;
+      }
+      .dt-pitfall-title {
+        font-weight: 700;
+        color: var(--danger);
+        font-size: 0.85rem;
+        margin-bottom: 0.4rem;
+      }
+
+      .dt-diagnostic {
+        margin-top: 0.8rem;
+        padding: 0.8rem;
+        background: rgba(88,166,255,0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(88,166,255,0.15);
+        font-size: 0.85rem;
+        line-height: 1.5;
+      }
+      .dt-diagnostic-title {
+        font-weight: 700;
+        color: var(--accent);
+        font-size: 0.85rem;
+        margin-bottom: 0.4rem;
+      }
+
+      /* ── Botones de acción ── */
+      .dt-actions {
+        display: flex;
+        gap: 0.6rem;
+        margin-top: 1.2rem;
+        flex-wrap: wrap;
+      }
+      .dt-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        font-family: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .dt-btn:hover {
+        border-color: var(--accent);
+        background: rgba(88,166,255,0.05);
+      }
+      .dt-btn.primary {
+        background: rgba(88,166,255,0.15);
+        border-color: rgba(88,166,255,0.3);
+        color: var(--accent);
+      }
+      .dt-btn.primary:hover {
+        background: rgba(88,166,255,0.25);
+      }
+
+      /* ── Historia / respuestas anteriores (colapsadas) ── */
+      .dt-answered {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.6rem 1rem;
+        margin-bottom: 0.5rem;
+        background: rgba(255,255,255,0.01);
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-size: 0.85rem;
+        opacity: 0.6;
+        transition: opacity 0.15s;
+      }
+      .dt-answered:hover {
+        opacity: 0.9;
+      }
+      .dt-answered-q {
+        color: var(--muted);
+        flex-shrink: 0;
+      }
+      .dt-answered-a {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      /* ── Sección de referencia rápida ── */
+      .dt-quickref {
+        margin-top: 2rem;
+        border-top: 1px solid var(--border);
+        padding-top: 1.5rem;
+      }
+      .dt-quickref h4 {
+        color: var(--accent);
+        margin-bottom: 1rem;
+      }
+      .dt-ref-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 0.8rem;
+      }
+      .dt-ref-card {
+        padding: 0.8rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .dt-ref-card:hover {
+        border-color: var(--accent);
+        background: rgba(88,166,255,0.03);
+      }
+      .dt-ref-card-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin-bottom: 0.3rem;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+      }
+      .dt-ref-card-desc {
+        font-size: 0.8rem;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      /* ── Counter / stats ── */
+      .dt-stats {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+      }
+      .dt-stat {
+        padding: 0.4rem 0.8rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .dt-stat strong {
+        color: var(--accent);
+      }
+
+      /* ── Responsive ── */
+      @media (max-width: 600px) {
+        .dt-ref-grid { grid-template-columns: 1fr; }
+        .dt-option { flex-direction: column; gap: 0.3rem; }
+        .dt-actions { flex-direction: column; }
+        .dt-btn { justify-content: center; }
+      }
+    </style>
+
+    <!-- ============================================ -->
+    <!-- ========= CONTENEDOR DEL ÁRBOL ============= -->
+    <!-- ============================================ -->
+
+    <div class="dt-stats">
+      <div class="dt-stat">🌳 <strong>8 decoradores</strong> cubiertos</div>
+      <div class="dt-stat">🔀 <strong>35+ rutas</strong> de decisión</div>
+      <div class="dt-stat">⚡ <strong>15+ optimizaciones</strong> transversales</div>
+    </div>
+
+    <div class="dt-breadcrumb" id="dt-breadcrumb"></div>
+    <div id="dt-history"></div>
+    <div id="dt-current"></div>
+
+    <!-- ============================================ -->
+    <!-- ============ REFERENCIA RÁPIDA ============= -->
+    <!-- ============================================ -->
+    <div class="dt-quickref">
+      <h4>⚡ Acceso directo — Ir a un decorador específico</h4>
+      <div class="dt-ref-grid">
+        <div class="dt-ref-card" onclick="dtJumpTo('result_njit_basic')">
+          <div class="dt-ref-card-title" style="color:var(--accent)">@njit</div>
+          <div class="dt-ref-card-desc">Compilar funciones con loops numéricos. El punto de partida para todo.</div>
+        </div>
+        <div class="dt-ref-card" onclick="dtJumpTo('result_njit_parallel')">
+          <div class="dt-ref-card-title" style="color:var(--accent)">@njit(parallel=True)</div>
+          <div class="dt-ref-card-desc">Auto-paralelización con prange para iteraciones independientes.</div>
+        </div>
+        <div class="dt-ref-card" onclick="dtJumpTo('result_vectorize')">
+          <div class="dt-ref-card-title" style="color:var(--accent2)">@vectorize</div>
+          <div class="dt-ref-card-desc">Crear ufuncs: escalar→escalar aplicado a arrays con broadcasting.</div>
+        </div>
+        <div class="dt-ref-card" onclick="dtJumpTo('result_guvectorize')">
+          <div class="dt-ref-card-title" style="color:var(--accent3)">@guvectorize</div>
+          <div class="dt-ref-card-desc">Ufuncs generalizados: operar sobre sub-arrays (filas, ventanas).</div>
+        </div>
+        <div class="dt-ref-card" onclick="dtJumpTo('result_stencil')">
+          <div class="dt-ref-card-title" style="color:var(--accent4)">@stencil</div>
+          <div class="dt-ref-card-desc">Operaciones sobre vecindarios fijos: blur, difusión, convolutions.</div>
+        </div>
+        <div class="dt-ref-card" onclick="dtJumpTo('result_jitclass')">
+          <div class="dt-ref-card-title" style="color:var(--danger)">@jitclass</div>
+          <div class="dt-ref-card-desc">Clases compiladas con estado mutable y métodos rápidos.</div>
+        </div>
+        <div class="dt-ref-card" onclick="dtJumpTo('result_cfunc')">
+          <div class="dt-ref-card-title" style="color:var(--muted)">@cfunc</div>
+          <div class="dt-ref-card-desc">Callbacks C para SciPy, ctypes, y librerías externas.</div>
+        </div>
+        <div class="dt-ref-card" onclick="dtJumpTo('result_overload')">
+          <div class="dt-ref-card-title" style="color:var(--accent)">@overload</div>
+          <div class="dt-ref-card-desc">Hacer funciones externas compatibles con nopython mode.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- ======== JAVASCRIPT DEL ÁRBOL ============== -->
+    <!-- ============================================ -->
+    <script>
+    (function() {
+      'use strict';
+
+      // ══════════════════════════════════════════════
+      // ██ BASE DE CONOCIMIENTO COMPLETA DE NUMBA ██
+      // ══════════════════════════════════════════════
+
+      const TREE = {
+
+        // ────────────────────────────────────────────
+        // NODO RAÍZ
+        // ────────────────────────────────────────────
+        root: {
+          type: 'question',
+          text: '¿Qué tipo de problema estás intentando resolver?',
+          context: 'Esta es la pregunta fundamental. El decorador correcto depende de la NATURALEZA de tu operación, no de su complejidad.',
+          options: [
+            { id: 'loop_numerico', icon: '🔁', label: 'Tengo un loop numérico lento', desc: 'Un for en Python que recorre datos y hace cálculos aritméticos/matemáticos.' },
+            { id: 'escalar_a_array', icon: '📐', label: 'Operación escalar aplicada a arrays', desc: 'Una función que toma UN número y devuelve UN número, y quiero aplicarla a todo un array.' },
+            { id: 'subarray_ops', icon: '📊', label: 'Operación sobre sub-arrays (filas, ventanas)', desc: 'Necesito procesar filas de una matriz, ventanas de series temporales, o secciones de datos.' },
+            { id: 'vecindario', icon: '🔲', label: 'Cada resultado depende de sus vecinos', desc: 'Procesamiento de imágenes, filtros de convolución, difusión de calor, cellular automata.' },
+            { id: 'estado', icon: '🏗️', label: 'Necesito un objeto con estado mutable', desc: 'Filtro Kalman, acumulador online, simulador de partículas — algo que mantiene estado entre llamadas.' },
+            { id: 'interop', icon: '🔗', label: 'Interoperabilidad (callbacks, extensiones)', desc: 'Pasar funciones a SciPy/C, hacer funciones externas compatibles con Numba, o jittear un módulo entero.' },
+            { id: 'no_se', icon: '🤔', label: 'No estoy seguro / mi caso es diferente', desc: 'Quiero entender mejor antes de decidir, o mi problema no encaja en las categorías anteriores.' }
+          ]
+        },
+
+        // ────────────────────────────────────────────
+        // RAMA 1: LOOP NUMÉRICO
+        // ────────────────────────────────────────────
+        loop_numerico: {
+          type: 'question',
+          text: '¿Las iteraciones de tu loop son independientes entre sí?',
+          context: 'Si cada iteración NO lee resultados de iteraciones anteriores, el loop es paralelizable. Ejemplo independiente: calcular sqrt(x[i]) para cada i. Ejemplo dependiente: x[i] = x[i-1] * factor (cada paso necesita el anterior).',
+          options: [
+            { id: 'loop_paralelo', icon: '✅', label: 'Sí, cada iteración es independiente', desc: 'Puedo calcular cualquier iteración sin conocer el resultado de las demás.' },
+            { id: 'loop_secuencial', icon: '🔗', label: 'No, hay dependencia entre iteraciones', desc: 'Cada paso usa el resultado del paso anterior (EMA, filtro Kalman, series recursivas).' },
+            { id: 'loop_mixto', icon: '↔️', label: 'Hay un loop externo independiente y uno interno dependiente', desc: 'Ejemplo: para cada activo (independiente), calcular una EMA (dependiente).' }
+          ]
+        },
+
+        loop_paralelo: {
+          type: 'question',
+          text: '¿Cuántas iteraciones tiene tu loop aproximadamente?',
+          context: 'El paralelismo tiene un overhead de scheduling (~microsegundos para distribuir trabajo entre threads). Con pocas iteraciones, este overhead puede superar el beneficio.',
+          options: [
+            { id: 'loop_par_grande', icon: '🚀', label: 'Más de 10,000 iteraciones', desc: 'El overhead de paralelismo es despreciable. Vale la pena paralelizar.' },
+            { id: 'loop_par_medio', icon: '📏', label: 'Entre 100 y 10,000 iteraciones', desc: 'Zona gris. Depende de cuánto trabajo hace cada iteración.' },
+            { id: 'loop_par_chico', icon: '🔬', label: 'Menos de 100 iteraciones', desc: 'Probablemente no vale la pena paralelizar. El overhead puede ser mayor que el beneficio.' }
+          ]
+        },
+
+        loop_par_grande: {
+          type: 'question',
+          text: '¿La precisión exacta IEEE 754 es crítica?',
+          context: 'fastmath=True permite reordenar operaciones de punto flotante (error ~4 ULP). Esto habilita auto-vectorización SIMD y reduce el tiempo ~2x. En finanzas donde un centavo importa: NO. En ML, procesamiento de señales, simulaciones: SÍ es aceptable.',
+          options: [
+            { id: 'result_njit_parallel_fast', icon: '⚡', label: 'No es crítica (ML, señales, simulaciones)', desc: 'Puedo tolerar un error de ~4 ULP a cambio de ~2x más velocidad.' },
+            { id: 'result_njit_parallel_strict', icon: '🎯', label: 'Sí es crítica (finanzas, contabilidad, legal)', desc: 'Necesito resultados exactos según IEEE 754. Ni un centavo de error.' }
+          ]
+        },
+
+        loop_par_medio: {
+          type: 'question',
+          text: '¿Cada iteración individual hace mucho trabajo?',
+          context: 'Si cada iteración hace trabajo pesado (operaciones matriciales, muchos cálculos internos), el paralelismo vale la pena incluso con pocas iteraciones. Si cada iteración es trivial (una suma, una multiplicación), el overhead de scheduling domina.',
+          options: [
+            { id: 'loop_par_grande', icon: '💪', label: 'Sí, cada iteración es pesada', desc: 'Ejemplo: cada iteración resuelve un sistema lineal, calcula una FFT, o hace un loop interno largo.' },
+            { id: 'result_njit_basic', icon: '🪶', label: 'No, cada iteración es liviana', desc: 'Ejemplo: cada iteración hace una suma/multiplicación simple.' }
+          ]
+        },
+
+        loop_par_chico: {
+          type: 'result',
+          redirect: 'result_njit_basic'
+        },
+
+        loop_secuencial: {
+          type: 'question',
+          text: '¿Esta función se llama muchas veces desde Python?',
+          context: 'El overhead de llamar una función Numba desde Python es ~1μs. Si llamas la función 100,000 veces en un loop de Python, pierdes ~0.1 segundos solo en overhead de dispatch. La solución: mover el loop DENTRO de la función Numba.',
+          options: [
+            { id: 'result_njit_batch', icon: '🔄', label: 'Sí, se llama >1,000 veces en un loop Python', desc: 'Ejemplo: llamo calculate_ema(data) para cada activo en un loop Python.' },
+            { id: 'loop_seq_cache', icon: '1️⃣', label: 'No, se llama pocas veces con datos grandes', desc: 'Ejemplo: llamo una vez con 10 millones de datos.' }
+          ]
+        },
+
+        loop_seq_cache: {
+          type: 'question',
+          text: '¿La función se ejecuta repetidamente al reiniciar el script?',
+          context: 'cache=True guarda la función compilada en disco. En la siguiente ejecución del script, Numba carga desde disco en lugar de recompilar (~0.5s→~0.05s de startup). No lo uses si cambias frecuentemente funciones importadas de otros módulos, porque el cache no detecta esos cambios.',
+          options: [
+            { id: 'result_njit_cached', icon: '💾', label: 'Sí, es un script/servicio que se ejecuta repetidamente', desc: 'Ejemplo: un pipeline ETL diario, un servicio web, un backtest que corro muchas veces.' },
+            { id: 'result_njit_basic', icon: '🧪', label: 'No, estoy en desarrollo/experimentación activa', desc: 'Cambio la función frecuentemente y no me importa la compilación inicial.' }
+          ]
+        },
+
+        loop_mixto: {
+          type: 'result',
+          redirect: 'result_njit_parallel_inner'
+        },
+
+        // ────────────────────────────────────────────
+        // RAMA 2: ESCALAR A ARRAY
+        // ────────────────────────────────────────────
+        escalar_a_array: {
+          type: 'question',
+          text: '¿Tu función toma UN número y devuelve UN número?',
+          context: 'Esto es clave. @vectorize solo funciona con funciones puramente escalares: recibe escalares, devuelve un escalar. Si necesitas ver más de un elemento a la vez (calcular norma, media, varianza), @vectorize NO sirve.',
+          options: [
+            { id: 'escalar_puro', icon: '✅', label: 'Sí, es puramente escalar → escalar', desc: 'Ejemplos: calcular impuesto progresivo, función de activación custom, convertir temperatura.' },
+            { id: 'subarray_ops', icon: '❌', label: 'No, necesita ver varios elementos a la vez', desc: 'Necesita calcular media, norma, varianza, o comparar con otros elementos del array.' }
+          ]
+        },
+
+        escalar_puro: {
+          type: 'question',
+          text: '¿Necesitas las capacidades avanzadas de ufunc?',
+          context: '@vectorize te da gratis: broadcasting automático (funciona con arrays de cualquier shape), .reduce() y .accumulate(), y la integración nativa con NumPy. Si solo necesitas aplicar la función a un array 1D, @njit con un loop es más simple y sin overhead de dispatch de ufunc.',
+          options: [
+            { id: 'vectorize_avanzado', icon: '🎯', label: 'Sí: broadcasting, .reduce(), .accumulate()', desc: 'Quiero que funcione con arrays de cualquier shape, o necesito reduce/accumulate.' },
+            { id: 'vectorize_simple', icon: '📏', label: 'Solo necesito aplicarlo a un array 1D', desc: 'No necesito broadcasting ni operaciones de reducción.' }
+          ]
+        },
+
+        vectorize_avanzado: {
+          type: 'question',
+          text: '¿El array tiene más de ~1 millón de elementos?',
+          context: '@vectorize soporta target="parallel" para ejecutar en múltiples cores. El overhead de paralelismo solo vale la pena con arrays grandes.',
+          options: [
+            { id: 'result_vectorize_parallel', icon: '🚀', label: 'Sí, más de 1M elementos', desc: 'El paralelismo amortiza su overhead con esta cantidad de datos.' },
+            { id: 'result_vectorize', icon: '📐', label: 'No, o no estoy seguro', desc: 'Usar la versión serial es más predecible.' }
+          ]
+        },
+
+        vectorize_simple: {
+          type: 'question',
+          text: '¿La función será parte de una API pública o librería?',
+          context: 'Si estás creando una librería que otros usarán, @vectorize te da una interfaz NumPy estándar (broadcasting, .reduce(), etc.) que los usuarios esperan. Si es código interno, @njit es más simple.',
+          options: [
+            { id: 'result_vectorize', icon: '📦', label: 'Sí, es para una librería/API', desc: 'Quiero que los usuarios la usen como cualquier ufunc de NumPy.' },
+            { id: 'result_njit_scalar_loop', icon: '🔧', label: 'No, es código interno', desc: 'Solo yo (o mi equipo) lo usa. Prefiero simplicidad.' }
+          ]
+        },
+
+        // ────────────────────────────────────────────
+        // RAMA 3: SUB-ARRAY OPS
+        // ────────────────────────────────────────────
+        subarray_ops: {
+          type: 'question',
+          text: '¿Necesitas broadcasting automático entre inputs de distintas dimensiones?',
+          context: '@guvectorize te permite definir la operación sobre una sub-dimensión (ej: "(n)->()" = recibe vector, produce escalar) y Numba la aplica automáticamente sobre todas las dimensiones superiores. Si no necesitas broadcasting y solo vas a iterar filas con un loop, @njit es más simple y puede ser más rápido.',
+          options: [
+            { id: 'guvec_check', icon: '📐', label: 'Sí, necesito broadcasting automático', desc: 'Quiero que funcione automáticamente con arrays de distintas dimensiones.' },
+            { id: 'subarray_manual', icon: '🔁', label: 'No, voy a iterar las filas/ventanas con un loop', desc: 'Controlo la iteración yo mismo. Prefiero explicitar el loop.' }
+          ]
+        },
+
+        guvec_check: {
+          type: 'question',
+          text: '¿La función será llamada millones de veces con sub-arrays pequeños?',
+          context: '@guvectorize genera un ufunc NumPy con overhead de dispatch por cada invocación (verificación de tipos, resolución de broadcasting, etc.). Para millones de llamadas con sub-arrays pequeños (<100 elementos), este overhead se acumula. En ese caso, @njit con loop manual y output pre-allocado puede ser más eficiente.',
+          options: [
+            { id: 'result_njit_manual_subarray', icon: '⚡', label: 'Sí, millones de veces con datos pequeños', desc: 'Priorizo rendimiento puro. Acepto escribir más código.' },
+            { id: 'result_guvectorize', icon: '📊', label: 'No, pocas llamadas o sub-arrays grandes', desc: 'El overhead de dispatch es despreciable con sub-arrays grandes.' }
+          ]
+        },
+
+        subarray_manual: {
+          type: 'question',
+          text: '¿Las filas/ventanas son procesables en paralelo?',
+          context: 'Si cada fila/ventana se puede procesar independientemente de las demás, puedes usar prange sobre el loop externo para paralelizar. Esto es especialmente efectivo con matrices grandes (>10K filas).',
+          options: [
+            { id: 'result_njit_parallel_subarray', icon: '🚀', label: 'Sí, cada fila/ventana es independiente', desc: 'Ejemplo: normalizar cada fila de una matriz 10K×768.' },
+            { id: 'result_njit_sequential_subarray', icon: '🔗', label: 'No, hay dependencia entre filas/ventanas', desc: 'Ejemplo: el cálculo de la fila i depende del resultado de la fila i-1.' }
+          ]
+        },
+
+        // ────────────────────────────────────────────
+        // RAMA 4: VECINDARIO / STENCIL
+        // ────────────────────────────────────────────
+        vecindario: {
+          type: 'question',
+          text: '¿El patrón de vecindario es fijo (siempre los mismos offsets)?',
+          context: '@stencil requiere que los índices de vecindario sean constantes enteras literales en tiempo de compilación. Ejemplo válido: a[-1,0] + a[1,0] (offsets fijos). Ejemplo inválido: a[offset] donde offset es variable.',
+          options: [
+            { id: 'stencil_fijo', icon: '📍', label: 'Sí, siempre los mismos vecinos', desc: 'Ejemplo: blur 3×3, Laplaciano, Game of Life — siempre los mismos offsets.' },
+            { id: 'result_njit_variable_stencil', icon: '🔀', label: 'No, el patrón cambia según condiciones', desc: 'Los vecinos que accedo dependen de los datos o de un parámetro variable.' }
+          ]
+        },
+
+        stencil_fijo: {
+          type: 'question',
+          text: '¿Necesitas ejecutar el stencil desde dentro de una función paralela?',
+          context: '@stencil por sí solo ejecuta de forma serial. Para paralelizar, debes llamar al stencil desde una función decorada con @njit(parallel=True). Numba puede auto-paralelizar la ejecución del stencil cuando se llama desde contexto paralelo.',
+          options: [
+            { id: 'result_stencil_parallel', icon: '🚀', label: 'Sí, quiero máximo rendimiento paralelo', desc: 'Tengo datos grandes y quiero usar todos los cores.' },
+            { id: 'result_stencil', icon: '📍', label: 'No, serial está bien', desc: 'Los datos son moderados o solo necesito una ejecución.' }
+          ]
+        },
+
+        // ────────────────────────────────────────────
+        // RAMA 5: ESTADO MUTABLE
+        // ────────────────────────────────────────────
+        estado: {
+          type: 'question',
+          text: '¿Necesitas mantener estado ENTRE llamadas a la función?',
+          context: 'La diferencia clave: si pasas todos los datos y recibes un resultado sin estado residual, usa @njit con funciones puras. Si necesitas un objeto que acumula estado (ej: filtro Kalman que actualiza su covarianza entre cada tick), necesitas @jitclass.',
+          options: [
+            { id: 'estado_persistente', icon: '🏗️', label: 'Sí, el objeto vive entre llamadas', desc: 'Ejemplo: filtro.update(measurement) que modifica el estado interno del filtro.' },
+            { id: 'result_njit_functional', icon: '📦', label: 'No, solo proceso datos y devuelvo resultado', desc: 'Puedo pasar todo como argumentos y recibir el resultado sin estado residual.' }
+          ]
+        },
+
+        estado_persistente: {
+          type: 'question',
+          text: '¿El objeto necesita ser usado DENTRO de otras funciones @njit?',
+          context: '@jitclass crea una clase cuyas instancias pueden ser usadas dentro de funciones @njit con acceso a atributos tan rápido como leer un campo de una struct en C. Si solo necesitas el objeto en código Python normal, una clase regular podría bastar.',
+          options: [
+            { id: 'result_jitclass', icon: '⚡', label: 'Sí, se usa dentro de funciones @njit', desc: 'Ejemplo: paso el filtro como argumento a una función @njit que lo actualiza.' },
+            { id: 'jitclass_python', icon: '🐍', label: 'No, solo se usa desde Python normal', desc: 'El objeto vive en Python y sus métodos no se llaman desde @njit.' }
+          ]
+        },
+
+        jitclass_python: {
+          type: 'question',
+          text: '¿Los métodos del objeto hacen cálculos numéricos pesados?',
+          context: 'Si los métodos son computacionalmente intensivos, @jitclass los compila a código máquina. Si son ligeros (getters, setters, lógica simple), el overhead de definir tipos explícitos para @jitclass puede no valer la pena.',
+          options: [
+            { id: 'result_jitclass', icon: '💪', label: 'Sí, los métodos son computacionalmente pesados', desc: 'Cada llamada a un método hace miles de operaciones matemáticas.' },
+            { id: 'result_njit_functional', icon: '🪶', label: 'No, son métodos ligeros', desc: 'Mejor usar una clase Python normal y @njit solo para las funciones pesadas.' }
+          ]
+        },
+
+        // ────────────────────────────────────────────
+        // RAMA 6: INTEROPERABILIDAD
+        // ────────────────────────────────────────────
+        interop: {
+          type: 'question',
+          text: '¿Qué tipo de interoperabilidad necesitas?',
+          context: 'Numba ofrece varias herramientas para integrarse con código externo, SciPy, y para escalar la compilación a módulos enteros.',
+          options: [
+            { id: 'interop_callback', icon: '🔗', label: 'Pasar una función como callback a SciPy o C', desc: 'scipy.integrate.quad, scipy.optimize.minimize, o una librería C que acepta function pointers.' },
+            { id: 'interop_overload', icon: '🧩', label: 'Hacer una función externa compatible con @njit', desc: 'Tengo una función propia o de librería que quiero usar dentro de código @njit.' },
+            { id: 'interop_module', icon: '📦', label: 'Jittear un módulo entero automáticamente', desc: 'Tengo un módulo con muchas funciones y quiero compilar todas sin decorar una por una.' },
+            { id: 'interop_objmode', icon: '🌉', label: 'Ejecutar código Python normal dentro de @njit', desc: 'Necesito llamar una función que no es compatible con Numba desde dentro de código @njit.' }
+          ]
+        },
+
+        interop_callback: {
+          type: 'question',
+          text: '¿SciPy llama tu función muchas veces internamente?',
+          context: 'La diferencia entre pasar una función Python normal y un @cfunc a SciPy es enorme. scipy.integrate.quad puede llamar tu función miles de veces. Cada llamada sin @cfunc pasa por el intérprete Python. Con @cfunc, SciPy llama directamente al código máquina sin overhead.',
+          options: [
+            { id: 'result_cfunc', icon: '⚡', label: 'Sí, se llama miles/millones de veces', desc: 'Ejemplo: integrando que quad evalúa miles de veces.' },
+            { id: 'result_cfunc_simple', icon: '1️⃣', label: 'No, se llama pocas veces', desc: 'Aun así @cfunc es beneficioso, pero la diferencia es menor.' }
+          ]
+        },
+
+        interop_overload: {
+          type: 'question',
+          text: '¿Es una función que ya existe o una que estás creando?',
+          context: '@overload permite definir una implementación alternativa de una función que Numba puede compilar. Numba la usa en tiempo de compilación, y tu código original sigue funcionando fuera de Numba.',
+          options: [
+            { id: 'result_overload', icon: '🔧', label: 'Ya existe (mía o de una librería)', desc: 'Quiero que mi_funcion() funcione tanto en Python normal como dentro de @njit.' },
+            { id: 'result_register_jitable', icon: '🆕', label: 'La estoy creando desde cero', desc: 'Estoy escribiendo una utilidad nueva que será usada dentro de @njit.' }
+          ]
+        },
+
+        interop_module: {
+          type: 'result',
+          redirect: 'result_jit_module'
+        },
+
+        interop_objmode: {
+          type: 'result',
+          redirect: 'result_objmode'
+        },
+
+        // ────────────────────────────────────────────
+        // RAMA 7: NO ESTOY SEGURO
+        // ────────────────────────────────────────────
+        no_se: {
+          type: 'question',
+          text: '¿Tu código actual es principalmente...?',
+          context: 'Vamos a identificar tu caso por eliminación. La naturaleza del código te dirá qué camino seguir.',
+          options: [
+            { id: 'no_se_loops', icon: '🔁', label: 'Loops con operaciones numéricas', desc: 'For/while con sumas, multiplicaciones, acceso a arrays.' },
+            { id: 'no_se_numpy', icon: '📊', label: 'Operaciones vectorizadas de NumPy', desc: 'np.sum(), np.mean(), operaciones element-wise, broadcasting.' },
+            { id: 'no_se_objetos', icon: '🏗️', label: 'Clases y objetos con métodos', desc: 'Orientado a objetos con estado mutable.' },
+            { id: 'no_se_io', icon: '📁', label: 'Lectura/escritura de archivos o red', desc: 'I/O, bases de datos, HTTP, lectura de CSV.' }
+          ]
+        },
+
+        no_se_loops: { type: 'result', redirect: 'loop_numerico' },
+        no_se_numpy: {
+          type: 'question',
+          text: '¿Las operaciones de NumPy son el cuello de botella?',
+          context: 'NumPy ya ejecuta operaciones en C. Si tu cuello de botella son operaciones NumPy individuales, Numba puede ayudar al fusionar múltiples operaciones en un solo paso (evitando arrays temporales). Si el cuello de botella es la cantidad de llamadas a NumPy, Numba puede fusionar todo en un solo kernel.',
+          options: [
+            { id: 'result_njit_fuse', icon: '🔗', label: 'Sí, hago muchas operaciones encadenadas', desc: 'Ejemplo: result = np.sqrt(a**2 + b**2) * np.log(c + 1) — cada paso crea un array temporal.' },
+            { id: 'no_se_numpy_ok', icon: '✅', label: 'No realmente, NumPy ya es rápido para mi caso', desc: 'Mi cuello de botella está en otro lado (I/O, lógica de negocio, etc.).' }
+          ]
+        },
+        no_se_numpy_ok: {
+          type: 'result',
+          redirect: 'result_no_numba_needed'
+        },
+        no_se_objetos: { type: 'result', redirect: 'estado' },
+        no_se_io: {
+          type: 'result',
+          redirect: 'result_no_numba_io'
+        },
+
+
+        // ════════════════════════════════════════════
+        // ██████████  RESULTADOS FINALES  ██████████
+        // ════════════════════════════════════════════
+
+        // ── @njit básico ──
+        result_njit_basic: {
+          type: 'result',
+          decorator: '@njit',
+          decoratorClass: 'njit',
+          title: '@njit — Compilación JIT básica',
+          why: `<strong>@njit</strong> (alias de <strong>@jit</strong> desde Numba 0.59) compila tu función a código máquina nativo usando LLVM. Es el punto de partida universal: si tu código tiene loops con operaciones numéricas y arrays NumPy, @njit te dará velocidades cercanas a C sin cambiar tu lógica.`,
+          code: `from numba import njit
+import numpy as np
+
+@njit
+def mi_calculo(data):
+    n = len(data)
+    result = np.empty(n)
+    for i in range(n):
+        result[i] = np.sqrt(data[i]) * np.log(data[i] + 1)
+    return result
+
+# Primera llamada: compila (~0.5s) + ejecuta
+arr = np.random.rand(1_000_000)
+resultado = mi_calculo(arr)
+
+# Llamadas siguientes: solo ejecuta (~100x más rápido que Python)
+resultado = mi_calculo(arr)`,
+          options: [
+            { code: 'cache=True', desc: 'Guarda compilación en disco. Usa si el script se ejecuta repetidamente. No uses si cambias funciones importadas de otros módulos frecuentemente.' },
+            { code: 'nogil=True', desc: 'Libera el GIL. Permite ejecutar en paralelo con threading.Thread manual. No confundir con parallel=True.' },
+            { code: 'error_model="numpy"', desc: 'Usa la semántica de errores de NumPy (ej: división por cero retorna inf en vez de error).' },
+            { code: 'boundscheck=True', desc: 'Activa verificación de límites de array. Útil para debugging, desactívalo en producción (está desactivado por defecto).' }
+          ],
+          pitfall: `<strong>Warm-up:</strong> La primera llamada siempre es lenta (compilación JIT). Si tu aplicación necesita respuesta inmediata, haz warm-up con datos dummy del tamaño real al inicio:<br><code>mi_calculo(np.zeros(1))  # warm-up</code><br><br><strong>Tipos consistentes:</strong> Cada combinación nueva de tipos de entrada genera una recompilación. Si llamas con int64 y luego con float64, se compilan dos versiones distintas. Mantén los tipos consistentes o especifícalos con eager compilation.`,
+          diagnostic: `<strong>Verificar que funcionó:</strong><br><code>mi_calculo.inspect_types()</code> — muestra los tipos inferidos (asegúrate de que no hay "pyobject").<br><code>mi_calculo.signatures</code> — lista las especializaciones compiladas.`
+        },
+
+        // ── @njit con cache ──
+        result_njit_cached: {
+          type: 'result',
+          decorator: '@njit(cache=True)',
+          decoratorClass: 'njit',
+          title: '@njit(cache=True) — Compilación cacheada en disco',
+          why: `<strong>cache=True</strong> persiste la función compilada en archivos <code>__pycache__</code>. La próxima vez que el script se ejecute, Numba carga desde disco en ~0.05s en vez de recompilar en ~0.5s. Ideal para scripts de producción, pipelines ETL, y servicios que reinician.`,
+          code: `from numba import njit
+import numpy as np
+
+@njit(cache=True)
+def ema(data, alpha):
+    """Exponential Moving Average — dependencia secuencial"""
+    n = len(data)
+    result = np.empty(n)
+    result[0] = data[0]
+    for i in range(1, n):
+        result[i] = alpha * data[i] + (1 - alpha) * result[i-1]
+    return result
+
+# Primera ejecución del script: compila y cachea
+# Siguientes ejecuciones: carga desde disco (casi instantáneo)
+precios = np.random.rand(10_000_000)
+ema_result = ema(precios, 0.1)`,
+          options: [
+            { code: 'cache=True', desc: '⚠️ Limitaciones conocidas: (1) No detecta cambios en funciones importadas de OTROS módulos. (2) Las variables globales se tratan como constantes — el cache recuerda el valor al momento de compilar.' }
+          ],
+          pitfall: `<strong>Cache invalidation:</strong> Si cambias una función auxiliar en otro archivo que tu función @njit llama, el cache NO se invalida automáticamente. Borra <code>__pycache__</code> manualmente o usa <code>NUMBA_CACHE_DIR</code> para controlar la ubicación.<br><br><strong>Variables globales:</strong> Si tienes <code>N = 100</code> como global y lo cambias a <code>N = 200</code>, la versión cacheada seguirá usando <code>N = 100</code> hasta que borres el cache.`,
+          diagnostic: `<strong>Verificar que el cache funciona:</strong><br>Ejecuta el script dos veces y mide el tiempo de import/primera llamada. Debería ser ~10x más rápido la segunda vez.`
+        },
+
+        // ── @njit parallel+fastmath ──
+        result_njit_parallel_fast: {
+          type: 'result',
+          decorator: '@njit(parallel=True, fastmath=True)',
+          decoratorClass: 'njit',
+          title: '@njit(parallel=True, fastmath=True) — Máximo rendimiento',
+          why: `<strong>parallel=True</strong> auto-paraleliza loops con <code>prange</code> usando threads nativos (sin GIL). <strong>fastmath=True</strong> permite reordenar operaciones de punto flotante, habilitando vectorización SIMD. La combinación puede dar <strong>10-50x</strong> sobre Python puro. Si además instalas Intel SVML (<code>conda install intel-cmplr-lib-rt</code>), las funciones trascendentales (sin, cos, exp, log) se ejecutan hasta <strong>4x más rápido</strong>.`,
+          code: `from numba import njit, prange
+import numpy as np
+
+@njit(parallel=True, fastmath=True, cache=True)
+def procesar_masivo(data):
+    n = len(data)
+    result = np.empty(n)
+    for i in prange(n):  # prange = range paralelo
+        # Cada iteración se ejecuta en un thread separado
+        result[i] = np.sqrt(data[i]) * np.exp(-data[i]) + np.log(data[i] + 1)
+    return result
+
+# Reducción paralela (Numba la detecta automáticamente)
+@njit(parallel=True, fastmath=True)
+def suma_paralela(data):
+    n = len(data)
+    total = 0.0
+    for i in prange(n):
+        total += np.sqrt(data[i])  # reducción auto-detectada
+    return total
+
+arr = np.random.rand(10_000_000)
+resultado = procesar_masivo(arr)
+total = suma_paralela(arr)`,
+          options: [
+            { code: 'parallel=True', desc: 'Usa prange en lugar de range para marcar loops como paralelos. Numba también auto-paraleliza operaciones NumPy (np.sum, np.dot, etc.) sin prange.' },
+            { code: 'fastmath=True', desc: 'Permite reassociation, no-signed-zeros, y otras relajaciones. Error ~4 ULP. Puedes ser selectivo: fastmath={"reassoc", "nsz"} para solo algunas optimizaciones.' },
+            { code: 'prange', desc: 'Úsalo SOLO para loops donde las iteraciones son independientes. Para reducciones (sum, min, max), Numba las detecta automáticamente dentro de prange.' }
+          ],
+          pitfall: `<strong>prange NO es mágico:</strong> Si las iteraciones no son realmente independientes, obtendrás resultados incorrectos sin error. Numba NO verifica esto por ti.<br><br><strong>SVML importa mucho:</strong> Sin Intel SVML, funciones como np.sin, np.cos, np.exp son ~2-4x más lentas. Instala <code>intel-cmplr-lib-rt</code> siempre que uses funciones trascendentales.<br><br><strong>Overhead de scheduling:</strong> Con menos de ~10K iteraciones, el overhead de distribuir trabajo entre threads puede superar el beneficio. Mide siempre.`,
+          diagnostic: `<strong>Verificar paralelismo:</strong><br><code>procesar_masivo.parallel_diagnostics(level=4)</code> — muestra qué loops fueron paralelizados, qué fusiones se hicieron, y qué operaciones SIMD se aplicaron.<br><br><strong>Verificar SVML:</strong><br><code>procesar_masivo.inspect_llvm()</code> — busca cadenas como <code>__svml_sqrt</code> o <code>__svml_exp</code>. Si aparecen, SVML está activo.`
+        },
+
+        // ── @njit parallel strict ──
+        result_njit_parallel_strict: {
+          type: 'result',
+          decorator: '@njit(parallel=True)',
+          decoratorClass: 'njit',
+          title: '@njit(parallel=True) — Paralelo con precisión estricta',
+          why: `<strong>parallel=True sin fastmath</strong> te da paralelización multi-core manteniendo la semántica exacta IEEE 754. Ideal para <strong>cálculos financieros</strong> donde necesitas reproducibilidad bit-a-bit y no puedes tolerar errores de reordenamiento.`,
+          code: `from numba import njit, prange
+import numpy as np
+
+@njit(parallel=True, cache=True)  # SIN fastmath
+def calcular_pnl(precios, posiciones, comisiones):
+    """P&L preciso para un portafolio financiero"""
+    n = len(precios)
+    pnl = np.empty(n)
+    for i in prange(n):
+        pnl[i] = posiciones[i] * precios[i] - comisiones[i]
+    return pnl
+
+@njit(parallel=True)
+def valor_en_riesgo(returns, confidence_level):
+    """VaR paramétrico con precisión IEEE 754"""
+    n = len(returns)
+    mean = 0.0
+    for i in prange(n):
+        mean += returns[i]
+    mean /= n
+
+    variance = 0.0
+    for i in prange(n):
+        variance += (returns[i] - mean) ** 2
+    variance /= (n - 1)
+
+    # Aproximación normal del VaR
+    z_score = 2.326  # 99% confidence
+    return mean - z_score * np.sqrt(variance)`,
+          options: [
+            { code: 'error_model="numpy"', desc: 'Usa semántica NumPy para errores: división por cero → inf, no excepción. Útil para datos financieros que pueden tener valores edge-case.' }
+          ],
+          pitfall: `<strong>Reproducibilidad:</strong> Incluso con parallel=True sin fastmath, el ORDEN de acumulación en reducciones paralelas puede variar entre ejecuciones (cada thread acumula un subtotal diferente). Para reproducibilidad perfecta, usa sumas secuenciales con @njit simple (sin parallel).`,
+          diagnostic: `<strong>Verificar precisión:</strong> Compara resultados de la versión paralela vs. secuencial con <code>np.allclose(result_par, result_seq, rtol=0, atol=0)</code>. Deberían ser idénticos bit a bit (a diferencia de con fastmath).`
+        },
+
+        // ── @njit batch (mover loop adentro) ──
+        result_njit_batch: {
+          type: 'result',
+          decorator: '@njit (con batch processing)',
+          decoratorClass: 'njit',
+          title: '@njit con batch processing — Eliminar overhead de dispatch',
+          why: `El overhead de llamar una función Numba desde Python es ~1μs por llamada. Si llamas 100,000 veces desde un loop Python, pierdes ~0.1 segundos en overhead puro. La solución: <strong>mover el loop externo DENTRO de la función @njit</strong>. Así tienes un solo dispatch Python→Numba y todo el loop corre en código máquina.`,
+          code: `from numba import njit
+import numpy as np
+
+# ❌ MAL: loop externo en Python → 100K dispatches
+@njit
+def calcular_ema_una(data, alpha):
+    n = len(data)
+    result = np.empty(n)
+    result[0] = data[0]
+    for i in range(1, n):
+        result[i] = alpha * data[i] + (1 - alpha) * result[i-1]
+    return result
+
+# Esto genera 100,000 llamadas Python → Numba
+# for activo in range(100_000):
+#     resultados[activo] = calcular_ema_una(datos[activo], 0.1)
+
+# ✅ BIEN: todo dentro de @njit → 1 solo dispatch
+@njit(parallel=True, cache=True)
+def calcular_ema_batch(datos_2d, alpha):
+    """Procesa TODOS los activos en un solo dispatch"""
+    n_activos, n_periodos = datos_2d.shape
+    resultados = np.empty_like(datos_2d)
+    for a in prange(n_activos):          # paralelo: activos independientes
+        resultados[a, 0] = datos_2d[a, 0]
+        for t in range(1, n_periodos):   # secuencial: dependencia temporal
+            resultados[a, t] = alpha * datos_2d[a, t] + (1 - alpha) * resultados[a, t-1]
+    return resultados
+
+from numba import prange
+datos = np.random.rand(100_000, 5_000)  # 100K activos × 5K periodos
+resultados = calcular_ema_batch(datos, 0.1)  # UN solo dispatch`,
+          options: [
+            { code: 'parallel=True + prange', desc: 'Paraleliza el loop EXTERNO (activos) mientras el interno (temporal) corre secuencial. Lo mejor de ambos mundos.' }
+          ],
+          pitfall: `<strong>Regla del 1μs:</strong> Si tu loop Python llama a una función Numba más de ~1,000 veces, SIEMPRE mueve el loop dentro de @njit. El costo es reorganizar tus datos en un array 2D/3D en vez de una lista de arrays separados.<br><br><strong>Memoria:</strong> Un array 2D contiguo (100K × 5K × 8 bytes = ~4GB) es más cache-friendly que 100K arrays separados. Pero asegúrate de tener suficiente RAM.`,
+          diagnostic: `<strong>Medir el overhead:</strong><br><code>%timeit calcular_ema_una(datos_1d, 0.1)</code> vs <code>%timeit calcular_ema_batch(datos_2d, 0.1)</code> dividido por n_activos. La diferencia es el overhead de dispatch.`
+        },
+
+        // ── @njit parallel inner loop ──
+        result_njit_parallel_inner: {
+          type: 'result',
+          decorator: '@njit(parallel=True) con loop mixto',
+          decoratorClass: 'njit',
+          title: '@njit(parallel=True) — Loop externo paralelo, interno secuencial',
+          why: `Cuando tienes un loop externo donde cada iteración es independiente (ej: por activo, por sensor, por muestra), pero el loop interno tiene dependencia temporal (ej: EMA, filtro, acumulación), la estrategia es <strong>prange en el externo y range en el interno</strong>.`,
+          code: `from numba import njit, prange
+import numpy as np
+
+@njit(parallel=True, cache=True)
+def procesar_multi_serie(series, parametros):
+    """
+    series: (n_series, n_puntos) — cada fila es una serie temporal
+    parametros: (n_series,) — parámetro diferente por serie
+    """
+    n_series, n_puntos = series.shape
+    output = np.empty_like(series)
+
+    for s in prange(n_series):      # ← PARALELO: series independientes
+        alpha = parametros[s]
+        output[s, 0] = series[s, 0]
+        for t in range(1, n_puntos): # ← SECUENCIAL: dependencia temporal
+            output[s, t] = alpha * series[s, t] + (1 - alpha) * output[s, t-1]
+
+    return output
+
+datos = np.random.rand(50_000, 10_000)
+params = np.random.uniform(0.01, 0.5, 50_000)
+resultado = procesar_multi_serie(datos, params)`,
+          options: [
+            { code: 'prange + range', desc: 'prange SOLO en el loop cuyas iteraciones son independientes. range normal para el loop con dependencias. Numba los distingue correctamente.' },
+            { code: 'fastmath=True', desc: 'Añadir si la precisión IEEE 754 no es crítica. El loop interno con acumulación se beneficia del reordenamiento.' }
+          ],
+          pitfall: `<strong>Memory layout importa:</strong> Con series como filas (C-order), el loop interno accede a memoria contigua (óptimo). Si tus series fueran columnas, deberías transponer primero o usar Fortran-order.`,
+          diagnostic: `<strong>parallel_diagnostics(level=4)</strong> te dirá exactamente qué loop fue paralelizado. Deberías ver el loop externo marcado como "parallel" y el interno como "serial".`
+        },
+
+        // ── @njit escalar en loop ──
+        result_njit_scalar_loop: {
+          type: 'result',
+          decorator: '@njit',
+          decoratorClass: 'njit',
+          title: '@njit con loop manual — Más simple que @vectorize',
+          why: `Si tu función escalar→escalar solo necesita aplicarse a un array 1D y no necesitas broadcasting ni .reduce()/.accumulate(), un <strong>loop manual con @njit</strong> es más simple, sin el overhead conceptual ni el dispatch de ufunc.`,
+          code: `from numba import njit
+import numpy as np
+
+@njit(cache=True)
+def aplicar_activacion(data, result):
+    """Función de activación custom aplicada element-wise"""
+    for i in range(len(data)):
+        x = data[i]
+        if x > 0:
+            result[i] = x
+        else:
+            result[i] = 0.01 * (np.exp(x) - 1)  # ELU-like
+
+# Pre-allocar output (evita crear array temporal)
+arr = np.random.randn(1_000_000)
+out = np.empty_like(arr)
+aplicar_activacion(arr, out)`,
+          options: [
+            { code: 'parallel=True + prange', desc: 'Si el array es grande (>100K) y cada operación es independiente, añade parallel=True y cambia range→prange para paralelizar trivialmente.' }
+          ],
+          pitfall: `<strong>Pre-allocar output:</strong> Pasar el array de output como argumento (en vez de crearlo dentro) te permite reutilizar el buffer entre llamadas. Esto reduce presión en el garbage collector y mejora cache locality.`,
+          diagnostic: ``
+        },
+
+        // ── @njit fusionar operaciones ──
+        result_njit_fuse: {
+          type: 'result',
+          decorator: '@njit',
+          decoratorClass: 'njit',
+          title: '@njit — Fusionar operaciones NumPy (eliminar temporales)',
+          why: `Cuando encadenas operaciones NumPy como <code>result = np.sqrt(a**2 + b**2) * np.log(c + 1)</code>, NumPy crea <strong>arrays temporales</strong> para cada subexpresión. Con 10M de elementos, eso es 5 arrays × 80MB = 400MB de memoria temporal que además destruye el cache de CPU. <strong>@njit fusiona todo en un solo loop</strong>: una lectura, un cálculo, una escritura.`,
+          code: `import numpy as np
+from numba import njit, prange
+
+# ❌ NumPy: 5 arrays temporales de 80MB cada uno
+def numpy_chain(a, b, c):
+    return np.sqrt(a**2 + b**2) * np.log(c + 1)
+
+# ✅ Numba: cero temporales, todo en un solo pass
+@njit(parallel=True, fastmath=True, cache=True)
+def fused_chain(a, b, c):
+    n = len(a)
+    result = np.empty(n)
+    for i in prange(n):
+        result[i] = np.sqrt(a[i]**2 + b[i]**2) * np.log(c[i] + 1)
+    return result
+
+n = 10_000_000
+a, b, c = np.random.rand(n), np.random.rand(n), np.random.rand(n)
+# fused_chain es ~3-10x más rápido que numpy_chain
+# (el factor depende de cuánto pesa el overhead de memoria)`,
+          options: [
+            { code: 'parallel=True', desc: 'El loop fusionado es trivialmente paralelizable — cada i es independiente.' },
+            { code: 'fastmath=True', desc: 'Habilita SIMD vectorización del loop fusionado. Especialmente efectivo con SVML.' }
+          ],
+          pitfall: `<strong>¿Cuándo vale la pena?:</strong> Si tus arrays son pequeños (<10K elementos), el overhead de NumPy por temporales es insignificante y @njit no mejora mucho. La fusión brilla con datos que NO caben en L3 cache (>~10MB).`,
+          diagnostic: `<strong>Medir memoria:</strong> Usa <code>tracemalloc</code> para comparar el peak memory de la versión NumPy vs Numba. La diferencia debería ser proporcional al número de operaciones encadenadas.`
+        },
+
+        // ── @njit para funcional sin estado ──
+        result_njit_functional: {
+          type: 'result',
+          decorator: '@njit (funciones puras)',
+          decoratorClass: 'njit',
+          title: '@njit con funciones puras — Sin necesidad de @jitclass',
+          why: `Si puedes expresar tu lógica como <strong>funciones puras</strong> que reciben datos y devuelven resultados sin mantener estado, @njit es más simple, más rápido de compilar, y más fácil de testear que @jitclass. Pasa el "estado" como arrays explícitos.`,
+          code: `from numba import njit
+import numpy as np
+
+# En lugar de una clase con estado...
+# class KalmanFilter:
+#     def __init__(self): self.x = 0; self.P = 1
+#     def update(self, z): ...
+
+# ...usa funciones puras con estado explícito:
+@njit(cache=True)
+def kalman_update(x, P, z, R, Q):
+    """Un paso de Kalman — sin estado mutable"""
+    # Predicción
+    x_pred = x
+    P_pred = P + Q
+    # Corrección
+    K = P_pred / (P_pred + R)
+    x_new = x_pred + K * (z - x_pred)
+    P_new = (1 - K) * P_pred
+    return x_new, P_new
+
+@njit(cache=True)
+def kalman_filter_full(measurements, R, Q):
+    """Filtra toda la serie — loop secuencial"""
+    n = len(measurements)
+    filtered = np.empty(n)
+    x, P = 0.0, 1.0
+    for i in range(n):
+        x, P = kalman_update(x, P, measurements[i], R, Q)
+        filtered[i] = x
+    return filtered`,
+          options: [],
+          pitfall: `<strong>¿Cuándo SÍ necesitas @jitclass?:</strong> Cuando el estado es complejo (matrices, arrays con dimensiones dinámicas), cuando necesitas pasar el objeto a otras funciones @njit como argumento, o cuando la API orientada a objetos es fundamental para tu diseño.`,
+          diagnostic: ``
+        },
+
+        // ── @njit subarray paralelo ──
+        result_njit_parallel_subarray: {
+          type: 'result',
+          decorator: '@njit(parallel=True)',
+          decoratorClass: 'njit',
+          title: '@njit(parallel=True) + prange — Procesar sub-arrays en paralelo',
+          why: `Para procesar filas, ventanas, o secciones de un array grande donde cada sección es independiente, un <strong>loop con prange sobre las filas</strong> es simple y eficiente. Es más directo que @guvectorize cuando no necesitas broadcasting automático.`,
+          code: `from numba import njit, prange
+import numpy as np
+
+@njit(parallel=True, cache=True)
+def normalizar_filas(matrix):
+    """Normalizar cada fila a norma unitaria"""
+    n_filas, n_cols = matrix.shape
+    result = np.empty_like(matrix)
+    for i in prange(n_filas):          # cada fila es independiente
+        norma = 0.0
+        for j in range(n_cols):
+            norma += matrix[i, j] ** 2
+        norma = np.sqrt(norma)
+        if norma > 0:
+            for j in range(n_cols):
+                result[i, j] = matrix[i, j] / norma
+        else:
+            for j in range(n_cols):
+                result[i, j] = 0.0
+    return result
+
+data = np.random.rand(100_000, 768)
+normalizado = normalizar_filas(data)`,
+          options: [
+            { code: 'fastmath=True', desc: 'Seguro para normalización y operaciones similares donde la precisión exacta no es crítica.' }
+          ],
+          pitfall: `<strong>vs @guvectorize:</strong> Para este patrón específico, @njit con prange es generalmente más rápido porque evita el overhead de dispatch de ufunc. @guvectorize brilla cuando necesitas la interfaz de ufunc (broadcasting, .reduce(), etc.).`,
+          diagnostic: `<code>parallel_diagnostics(level=4)</code> debería mostrar el loop externo como paralelo. Si no lo paraleliza, asegúrate de que NO hay escritura compartida entre iteraciones.`
+        },
+
+        // ── @njit subarray secuencial ──
+        result_njit_sequential_subarray: {
+          type: 'result',
+          decorator: '@njit',
+          decoratorClass: 'njit',
+          title: '@njit — Procesar sub-arrays con dependencia',
+          why: `Cuando hay dependencia entre filas/ventanas (ej: el cálculo de la fila i depende del resultado de la fila i-1), no puedes paralelizar el loop externo. Pero @njit aún te da el beneficio de compilar a código máquina.`,
+          code: `from numba import njit
+import numpy as np
+
+@njit(cache=True)
+def propagacion_secuencial(matrix, decay):
+    """Cada fila depende de la anterior"""
+    n_filas, n_cols = matrix.shape
+    result = np.empty_like(matrix)
+    # Primera fila: copia directa
+    for j in range(n_cols):
+        result[0, j] = matrix[0, j]
+    # Resto: cada fila incorpora información de la anterior
+    for i in range(1, n_filas):
+        for j in range(n_cols):
+            result[i, j] = matrix[i, j] + decay * result[i-1, j]
+    return result`,
+          options: [
+            { code: 'fastmath=True', desc: 'Añade si la precisión exacta no es crítica. El loop interno (sobre columnas) puede vectorizarse con SIMD.' }
+          ],
+          pitfall: `<strong>El loop sobre columnas SÍ es paralelizable:</strong> Aunque las filas son secuenciales, el loop interno sobre columnas podría paralelizarse. Numba con parallel=True puede detectar esto automáticamente.`,
+          diagnostic: ``
+        },
+
+        // ── @njit para sub-arrays con rendimiento crítico ──
+        result_njit_manual_subarray: {
+          type: 'result',
+          decorator: '@njit (loop manual + pre-allocated output)',
+          decoratorClass: 'njit',
+          title: '@njit — Loop manual optimizado vs @guvectorize',
+          why: `Cuando procesas <strong>millones de sub-arrays pequeños</strong>, el overhead de dispatch de ufunc de @guvectorize se acumula. Un loop manual con @njit + output pre-allocado elimina ese overhead. Es más código, pero puede ser significativamente más rápido para este patrón específico.`,
+          code: `from numba import njit, prange
+import numpy as np
+
+# Pre-allocar output una sola vez
+@njit(parallel=True, cache=True)
+def norma_filas_manual(matrix, output):
+    """Calcula norma de cada fila — sin overhead de ufunc dispatch"""
+    n_filas, n_cols = matrix.shape
+    for i in prange(n_filas):
+        acc = 0.0
+        for j in range(n_cols):
+            acc += matrix[i, j] ** 2
+        output[i] = np.sqrt(acc)
+
+# Uso: pre-allocar y reutilizar
+data = np.random.rand(1_000_000, 64)
+output = np.empty(data.shape[0])
+norma_filas_manual(data, output)  # sin allocación interna`,
+          options: [
+            { code: 'Pre-allocar output', desc: 'Pasar el array de output como argumento evita crear un nuevo array en cada llamada. Crucial cuando la función se llama repetidamente en un pipeline.' }
+          ],
+          pitfall: `<strong>Trade-off claridad vs rendimiento:</strong> @guvectorize con "(n)->()" es más expresivo y autodocumentado. El loop manual es más rápido pero menos legible. Usa benchmarks con TUS datos antes de decidir.`,
+          diagnostic: ``
+        },
+
+        // ── @njit stencil variable ──
+        result_njit_variable_stencil: {
+          type: 'result',
+          decorator: '@njit',
+          decoratorClass: 'njit',
+          title: '@njit — Stencil con vecindario variable',
+          why: `Cuando el patrón de vecindario cambia según condiciones (ej: adaptive smoothing, vecindario variable según la densidad local), <strong>@stencil no aplica</strong> porque requiere offsets literales constantes. Usa @njit con loops manuales y boundary checking explícito.`,
+          code: `from numba import njit, prange
+import numpy as np
+
+@njit(parallel=True, cache=True)
+def adaptive_smooth(data, radii):
+    """Suavizado con radio variable por posición"""
+    n = len(data)
+    result = np.empty(n)
+    for i in prange(n):
+        r = radii[i]  # radio diferente por posición
+        total = 0.0
+        count = 0
+        for j in range(max(0, i - r), min(n, i + r + 1)):
+            total += data[j]
+            count += 1
+        result[i] = total / count if count > 0 else 0.0
+    return result`,
+          options: [],
+          pitfall: `<strong>Cuidado con prange:</strong> Si el radio variable hace que iteraciones adyacentes lean regiones solapadas, prange sigue siendo seguro para lecturas concurrentes. Solo falla si hay ESCRITURAS solapadas.`,
+          diagnostic: ``
+        },
+
+        // ── @vectorize ──
+        result_vectorize: {
+          type: 'result',
+          decorator: '@vectorize',
+          decoratorClass: 'vectorize',
+          title: '@vectorize — Crear ufuncs NumPy',
+          why: `<strong>@vectorize</strong> convierte una función escalar→escalar en un <strong>ufunc NumPy real</strong>. Obtienes gratis: broadcasting automático (funciona con cualquier shape), <code>.reduce()</code>, <code>.accumulate()</code>, <code>.outer()</code>, y la integración completa con el ecosistema NumPy. Ideal cuando quieres una interfaz limpia y estándar.`,
+          code: `from numba import vectorize, float64, int64
+
+# Modo eager: especificas tipos → compila inmediatamente
+@vectorize([float64(float64)])
+def impuesto_progresivo(ingreso):
+    """Calcula impuesto con tramos progresivos"""
+    if ingreso <= 12000:
+        return ingreso * 0.0
+    elif ingreso <= 40000:
+        return (ingreso - 12000) * 0.15
+    elif ingreso <= 80000:
+        return 4200 + (ingreso - 40000) * 0.25
+    else:
+        return 14200 + (ingreso - 80000) * 0.35
+
+# Modo lazy: sin tipos → compila en primera llamada
+@vectorize
+def activacion_custom(x):
+    if x > 0:
+        return x
+    else:
+        return 0.01 * x  # Leaky ReLU
+
+import numpy as np
+ingresos = np.array([10000, 30000, 60000, 100000])
+impuestos = impuesto_progresivo(ingresos)
+
+# Broadcasting gratis:
+matrix = np.random.rand(100, 200)
+result = activacion_custom(matrix)  # funciona sin cambios
+
+# .reduce() gratis:
+# activacion_custom.reduce(array)  # reduce a escalar
+# activacion_custom.accumulate(array)  # scan acumulativo`,
+          options: [
+            { code: 'Eager vs Lazy', desc: 'Eager: @vectorize([float64(float64)]) — compila al decorar, más control, permite múltiples firmas. Lazy: @vectorize — compila en primera llamada, más flexible pero genera DUFunc.' },
+            { code: 'Múltiples firmas', desc: '@vectorize([int32(int32), float64(float64)]) — soporta múltiples tipos de entrada. Numba elige la firma correcta automáticamente.' }
+          ],
+          pitfall: `<strong>Solo escalares:</strong> @vectorize SOLO ve un elemento a la vez. No puedes acceder a x[i-1], no puedes calcular la media, no puedes ver el array completo. Si necesitas eso, usa @guvectorize o @njit.<br><br><strong>Modo lazy (DUFunc):</strong> Sin firmas explícitas, genera un DUFunc que recompila con cada nuevo tipo. Peligroso si le pasas tipos inconsistentes accidentalmente.`,
+          diagnostic: `<strong>Ver firmas compiladas:</strong><br><code>impuesto_progresivo.types</code> — lista todas las especializaciones compiladas.`
+        },
+
+        // ── @vectorize parallel ──
+        result_vectorize_parallel: {
+          type: 'result',
+          decorator: '@vectorize(target="parallel")',
+          decoratorClass: 'vectorize',
+          title: '@vectorize(target="parallel") — Ufunc multi-core',
+          why: `Con <code>target="parallel"</code>, el ufunc ejecuta en múltiples cores automáticamente. Solo vale la pena con <strong>arrays grandes (>1M elementos)</strong> porque el overhead de distribución de trabajo entre threads es significativo.`,
+          code: `from numba import vectorize, float64
+
+@vectorize([float64(float64)], target='parallel')
+def sigmoid_parallel(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+import numpy as np
+# Efectivo con arrays grandes:
+huge_array = np.random.randn(10_000_000)
+result = sigmoid_parallel(huge_array)  # usa todos los cores`,
+          options: [
+            { code: 'target="parallel"', desc: 'Targets disponibles: "cpu" (serial, default), "parallel" (multi-core). Para CUDA GPU se usa numba.cuda en lugar de @vectorize.' },
+            { code: 'Requiere firmas explícitas', desc: 'target="parallel" REQUIERE modo eager (firmas explícitas). No funciona con modo lazy.' }
+          ],
+          pitfall: `<strong>No asumas que paralelo = más rápido:</strong> Con arrays pequeños (<100K), la versión serial "cpu" es más rápida. Mide siempre. El target="parallel" de @vectorize usa un mecanismo diferente al parallel=True de @njit.`,
+          diagnostic: ``
+        },
+
+        // ── @guvectorize ──
+        result_guvectorize: {
+          type: 'result',
+          decorator: '@guvectorize',
+          decoratorClass: 'guvectorize',
+          title: '@guvectorize — Ufuncs generalizados',
+          why: `<strong>@guvectorize</strong> extiende @vectorize a operaciones sobre <strong>sub-arrays</strong>. Defines la firma dimensional (ej: "(n)->()" = recibe vector de n, produce escalar) y Numba aplica automáticamente la operación sobre las dimensiones superiores con broadcasting. El resultado es un <strong>gufunc</strong> compatible con el ecosistema NumPy.`,
+          code: `from numba import guvectorize, float64
+
+# "(n)->()" significa: recibe array de n elementos, produce un escalar
+@guvectorize([(float64[:], float64[:])], '(n)->()')
+def norma_l2(vec, result):
+    """Norma L2 de un vector"""
+    acc = 0.0
+    for i in range(vec.shape[0]):
+        acc += vec[i] ** 2
+    result[0] = np.sqrt(acc)  # output via argumento, no return
+
+# "(n),(n)->(n)" = dos inputs de n, un output de n
+@guvectorize([(float64[:], float64[:], float64[:])], '(n),(n)->(n)')
+def weighted_add(a, b, result):
+    for i in range(a.shape[0]):
+        result[i] = 0.7 * a[i] + 0.3 * b[i]
+
+import numpy as np
+# Broadcasting automático:
+matrix = np.random.rand(10_000, 768)
+normas = norma_l2(matrix)  # (10_000,) — aplicó a cada fila
+
+# Funciona con cualquier dimensión superior:
+tensor = np.random.rand(100, 50, 768)
+normas_3d = norma_l2(tensor)  # (100, 50) — broadcasting gratis`,
+          options: [
+            { code: 'Firmas dimensionales', desc: '"(n)->()" = vector→escalar. "(m,n)->(m)" = matriz→vector. "(n),(n)->(n)" = dos vectores→vector. El output siempre es un argumento, no un return.' },
+            { code: 'target="parallel"', desc: 'Similar a @vectorize, puedes usar target="parallel" para ejecución multi-core. Requiere firmas explícitas.' },
+            { code: 'Retornar escalar', desc: 'Para retornar un escalar usa firma "(n)->()" y escribe en result[0]. No uses return.' }
+          ],
+          pitfall: `<strong>Output via argumento:</strong> @guvectorize NO usa return. El resultado se escribe en el último argumento (que NumPy pre-alloca). Esto confunde a muchos principiantes.<br><br><strong>Overhead de dispatch:</strong> Cada invocación del gufunc tiene overhead de tipo-checking y broadcasting resolution. Para millones de llamadas con sub-arrays pequeños, considera @njit con loop manual.`,
+          diagnostic: ``
+        },
+
+        // ── @stencil ──
+        result_stencil: {
+          type: 'result',
+          decorator: '@stencil',
+          decoratorClass: 'stencil',
+          title: '@stencil — Operaciones sobre vecindarios fijos',
+          why: `<strong>@stencil</strong> es azúcar sintáctica para operaciones donde cada elemento del output depende de sus vecinos en un patrón fijo. Escribes <code>a[-1, 0] + a[1, 0]</code> para referirte a "un paso arriba" y "un paso abajo", y Numba genera el loop, maneja los bordes, y puede paralelizar automáticamente.`,
+          code: `from numba import stencil
+import numpy as np
+
+@stencil
+def blur_3x3(a):
+    """Promedio de los 8 vecinos + el centro"""
+    return (a[-1, -1] + a[-1, 0] + a[-1, 1] +
+            a[ 0, -1] + a[ 0, 0] + a[ 0, 1] +
+            a[ 1, -1] + a[ 1, 0] + a[ 1, 1]) / 9.0
+
+@stencil
+def laplaciano_2d(a):
+    """Operador Laplaciano discreto"""
+    return a[-1, 0] + a[1, 0] + a[0, -1] + a[0, 1] - 4 * a[0, 0]
+
+@stencil
+def game_of_life_step(grid):
+    """Un paso del Game of Life de Conway"""
+    vecinos = (grid[-1, -1] + grid[-1, 0] + grid[-1, 1] +
+               grid[ 0, -1]              + grid[ 0, 1] +
+               grid[ 1, -1] + grid[ 1, 0] + grid[ 1, 1])
+    if grid[0, 0] == 1:  # célula viva
+        if vecinos < 2 or vecinos > 3:
+            return 0  # muere
+        return 1      # sobrevive
+    else:               # célula muerta
+        if vecinos == 3:
+            return 1  # nace
+        return 0      # sigue muerta
+
+imagen = np.random.rand(1000, 1000)
+borrosa = blur_3x3(imagen)  # bordes se ponen a 0 por defecto`,
+          options: [
+            { code: 'Bordes', desc: 'Por defecto, los bordes del output se ponen a 0 (no hay vecinos fuera del array). Puedes usar func_or_mode="constant" con cval para cambiar el valor del borde.' },
+            { code: 'Con parámetros extra', desc: '@stencil puede recibir argumentos escalares adicionales: @stencil def kernel(a, factor): return factor * (a[-1,0] + a[1,0])' }
+          ],
+          pitfall: `<strong>Solo offsets literales:</strong> Los índices deben ser constantes enteras. <code>a[variable, 0]</code> NO funciona. Para vecindarios dinámicos, usa @njit con loop manual.<br><br><strong>Output type:</strong> Numba infiere el tipo del output. En el ejemplo del blur, aunque la entrada es int64, el output será float64 porque la división produce un float.`,
+          diagnostic: ``
+        },
+
+        // ── @stencil paralelo ──
+        result_stencil_parallel: {
+          type: 'result',
+          decorator: '@stencil + @njit(parallel=True)',
+          decoratorClass: 'stencil',
+          title: '@stencil con paralelismo — Llamar desde función paralela',
+          why: `@stencil por sí solo ejecuta de forma serial. Para paralelizar, <strong>llama al stencil desde dentro de una función @njit(parallel=True)</strong>. Numba detecta que el stencil puede paralelizarse y distribuye el trabajo entre cores automáticamente.`,
+          code: `from numba import stencil, njit
+import numpy as np
+
+@stencil
+def difusion_kernel(T, coef):
+    """Paso de difusión de calor 2D"""
+    return T[0, 0] + coef * (
+        T[-1, 0] + T[1, 0] + T[0, -1] + T[0, 1] - 4 * T[0, 0]
+    )
+
+@njit(parallel=True)  # ← esto paraleliza la ejecución del stencil
+def simular_calor(T_initial, coef, n_pasos):
+    T = T_initial.copy()
+    for step in range(n_pasos):
+        T = difusion_kernel(T, coef)  # paralelizado automáticamente
+    return T
+
+# Simulación
+grid = np.zeros((500, 500))
+grid[240:260, 240:260] = 100.0  # fuente de calor
+resultado = simular_calor(grid, 0.25, 1000)`,
+          options: [],
+          pitfall: `<strong>El loop temporal NO se paraleliza:</strong> Solo la ejecución interna del stencil (recorrer la grilla) se paraleliza. El loop <code>for step in range(n_pasos)</code> sigue siendo secuencial porque cada paso depende del anterior.`,
+          diagnostic: `<code>simular_calor.parallel_diagnostics(level=4)</code> debería mostrar la ejecución del stencil como paralela.`
+        },
+
+        // ── @jitclass ──
+        result_jitclass: {
+          type: 'result',
+          decorator: '@jitclass',
+          decoratorClass: 'jitclass',
+          title: '@jitclass — Clases compiladas con estado',
+          why: `<strong>@jitclass</strong> compila una clase completa: atributos tipados (acceso tan rápido como struct en C) y métodos compilados. Ideal cuando necesitas un <strong>objeto con estado mutable</strong> que se usa dentro de funciones @njit. Debes declarar los tipos de TODOS los atributos.`,
+          code: `from numba import njit, int64, float64
+from numba.experimental import jitclass
+
+# Definir tipos de todos los atributos
+spec = [
+    ('n', int64),
+    ('mean', float64),
+    ('M2', float64),
+]
+
+@jitclass(spec)
+class WelfordAccumulator:
+    """Algoritmo de Welford para media y varianza online"""
+    def __init__(self):
+        self.n = 0
+        self.mean = 0.0
+        self.M2 = 0.0
+
+    def update(self, x):
+        self.n += 1
+        delta = x - self.mean
+        self.mean += delta / self.n
+        delta2 = x - self.mean
+        self.M2 += delta * delta2
+
+    def variance(self):
+        if self.n < 2:
+            return 0.0
+        return self.M2 / (self.n - 1)
+
+    def std(self):
+        return np.sqrt(self.variance())
+
+# Usar desde Python
+import numpy as np
+acc = WelfordAccumulator()
+for x in np.random.randn(1_000_000):
+    acc.update(x)
+print(f"Media: {acc.mean:.6f}, Std: {acc.std():.6f}")
+
+# Usar DENTRO de @njit
+@njit
+def procesar_stream(data):
+    acc = WelfordAccumulator()
+    for i in range(len(data)):
+        acc.update(data[i])
+    return acc.mean, acc.std()`,
+          options: [
+            { code: 'spec', desc: 'Los tipos se declaran como lista de tuplas: [("nombre", tipo)]. Tipos comunes: int64, float64, float64[:], float64[:,:], boolean.' },
+            { code: 'numba.typed containers', desc: 'Para listas y diccionarios dentro de @jitclass, usa numba.typed.List y numba.typed.Dict en vez de list/dict de Python.' }
+          ],
+          pitfall: `<strong>Importar de experimental:</strong> <code>from numba.experimental import jitclass</code> — sigue siendo experimental. La API puede cambiar entre versiones.<br><br><strong>Todos los atributos deben ser tipados:</strong> No puedes tener atributos opcionales o de tipo variable. Si un atributo puede ser None, necesitas manejarlo manualmente (ej: usar un valor sentinela como -1.0 o NaN).<br><br><strong>No soporta herencia:</strong> @jitclass no soporta herencia de clases. Usa composición en su lugar.`,
+          diagnostic: ``
+        },
+
+        // ── @cfunc ──
+        result_cfunc: {
+          type: 'result',
+          decorator: '@cfunc',
+          decoratorClass: 'cfunc',
+          title: '@cfunc — Callbacks C para SciPy y librerías externas',
+          why: `<strong>@cfunc</strong> produce un function pointer compatible con C que SciPy o ctypes pueden llamar directamente <strong>sin pasar por el intérprete Python</strong>. Cuando SciPy llama tu función miles de veces internamente (ej: quad para integración, minimize para optimización), la diferencia es dramática: ~18x más rápido según benchmarks de la documentación oficial.`,
+          code: `import numpy as np
+from numba import cfunc
+from scipy import integrate
+
+# Definir el integrando como @cfunc
+@cfunc("float64(float64)")
+def integrando(t):
+    return np.exp(-t) / t**2
+
+# Pasar el .ctypes al integrador de SciPy
+result, error = integrate.quad(integrando.ctypes, 1, np.inf)
+# ~18x más rápido que pasar una función Python normal
+
+# Ejemplo con optimize
+from scipy.optimize import minimize_scalar
+
+@cfunc("float64(float64)")
+def funcion_objetivo(x):
+    return (x - 3.14159) ** 2 + np.sin(x * 10) * 0.1
+
+# minimize_scalar llama la función cientos de veces
+result = minimize_scalar(funcion_objetivo.ctypes, bounds=(0, 10), method='bounded')`,
+          options: [
+            { code: 'Firma string', desc: '@cfunc("float64(float64, float64)") — la firma usa strings de tipos Numba. El formato es "retorno(arg1, arg2, ...)".' },
+            { code: '.ctypes', desc: 'Accede al callback C con .ctypes. Pásalo donde SciPy o ctypes esperen un function pointer.' },
+            { code: 'Punteros y arrays', desc: 'Para callbacks que reciben punteros a datos (ej: doble *input, int n), usa numba.carray() para crear vistas de arrays desde punteros C.' }
+          ],
+          pitfall: `<strong>Sin objetos Python:</strong> @cfunc compila en nopython mode. No puedes usar listas, diccionarios, o llamar funciones Python arbitrarias dentro del callback.<br><br><strong>Firma fija:</strong> A diferencia de @njit, @cfunc requiere exactamente UNA firma. No hay inferencia de tipos ni múltiples especializaciones.`,
+          diagnostic: ``
+        },
+
+        // ── @cfunc simple ──
+        result_cfunc_simple: {
+          type: 'result',
+          decorator: '@cfunc',
+          decoratorClass: 'cfunc',
+          title: '@cfunc — Callback C (pocas llamadas)',
+          why: `Incluso con pocas llamadas, @cfunc elimina el overhead del intérprete Python en cada invocación. La compilación es un costo único. Úsalo siempre que pases funciones a SciPy.`,
+          code: `from numba import cfunc
+from scipy.optimize import brentq
+
+@cfunc("float64(float64)")
+def ecuacion(x):
+    return x**3 - 2*x - 5  # buscar raíz
+
+raiz = brentq(ecuacion.ctypes, 2, 3)`,
+          options: [],
+          pitfall: `Aunque la diferencia de rendimiento sea menor con pocas llamadas, el costo de @cfunc es despreciable (compilación una sola vez). No hay razón para NO usarlo.`,
+          diagnostic: ``
+        },
+
+        // ── @overload ──
+        result_overload: {
+          type: 'result',
+          decorator: '@overload',
+          decoratorClass: 'overload',
+          title: '@overload — Hacer funciones compatibles con nopython mode',
+          why: `<strong>@overload</strong> te permite definir una implementación alternativa de una función que Numba usa en tiempo de compilación. La función original sigue funcionando en Python normal. Es el puente entre el mundo Python y el mundo Numba.`,
+          code: `from numba import njit
+from numba.extending import overload
+import numpy as np
+
+# Tu función que NO funciona dentro de @njit
+def mi_clip(x, lo, hi):
+    """Clip personalizado con lógica custom"""
+    return min(max(x, lo), hi)
+
+# Implementación para Numba
+@overload(mi_clip)
+def mi_clip_overload(x, lo, hi):
+    # Esta función retorna la IMPLEMENTACIÓN, no el resultado
+    def impl(x, lo, hi):
+        if x < lo:
+            return lo
+        elif x > hi:
+            return hi
+        return x
+    return impl
+
+# Ahora funciona en ambos mundos:
+print(mi_clip(5.0, 0.0, 3.0))  # Python normal: 3.0
+
+@njit
+def procesar(data, lo, hi):
+    result = np.empty_like(data)
+    for i in range(len(data)):
+        result[i] = mi_clip(data[i], lo, hi)  # usa la versión overloaded
+    return result
+
+resultado = procesar(np.array([1.0, 5.0, -2.0]), 0.0, 3.0)`,
+          options: [
+            { code: 'Estructura', desc: '@overload(funcion_original) decora una función que RETORNA la implementación (no el resultado directo). El patrón es: def overload_fn(args): def impl(args): ... return impl' },
+            { code: 'Type dispatch', desc: 'Dentro de @overload puedes inspeccionar los tipos de los argumentos para retornar diferentes implementaciones según el tipo.' }
+          ],
+          pitfall: `<strong>Retorna la implementación, no el resultado:</strong> El error más común es escribir lógica directa dentro de @overload en vez de retornar una función interna que contiene la lógica.<br><br><strong>Solo nopython:</strong> La implementación que retornas debe ser compatible con nopython mode (sin objetos Python, sin I/O, sin excepciones complejas).`,
+          diagnostic: ``
+        },
+
+        // ── register_jitable ──
+        result_register_jitable: {
+          type: 'result',
+          decorator: '@njit (register_jitable o simplemente @njit)',
+          decoratorClass: 'njit',
+          title: 'Funciones nuevas para usar dentro de @njit',
+          why: `Si estás creando una función nueva desde cero que será usada dentro de @njit, la solución más simple es <strong>decorarla con @njit</strong>. Numba puede llamar funciones @njit desde dentro de otras funciones @njit sin overhead. No necesitas @overload para funciones nuevas.`,
+          code: `from numba import njit
+
+# Función auxiliar — también compilada
+@njit
+def safe_divide(a, b):
+    if b == 0:
+        return 0.0
+    return a / b
+
+@njit
+def safe_log(x):
+    if x <= 0:
+        return -999.0  # sentinel value
+    return np.log(x)
+
+# Usarlas dentro de otra @njit: cero overhead
+@njit
+def pipeline(data):
+    result = np.empty(len(data))
+    for i in range(len(data)):
+        result[i] = safe_log(safe_divide(data[i], data[i] + 1))
+    return result`,
+          options: [
+            { code: '@njit para todo', desc: 'Cuando @njit llama a otra @njit, Numba puede incluso INLINEAR la función auxiliar, eliminando totalmente el overhead de llamada.' }
+          ],
+          pitfall: `<strong>¿Cuándo usar @overload en vez de @njit?:</strong> Solo cuando necesitas que una función EXISTENTE (que no puedes o no quieres modificar) funcione dentro de @njit. Si creas algo nuevo, @njit es suficiente.`,
+          diagnostic: ``
+        },
+
+        // ── jit_module ──
+        result_jit_module: {
+          type: 'result',
+          decorator: 'jit_module()',
+          decoratorClass: 'jit_module',
+          title: 'jit_module() — Jittear un módulo entero automáticamente',
+          why: `<strong>jit_module()</strong> aplica @jit automáticamente a TODAS las funciones definidas en un módulo Python, sin decorar cada una manualmente. Ideal cuando tienes un módulo con muchas funciones utilitarias numéricas.`,
+          code: `# mi_modulo.py
+from numba import jit_module
+import numpy as np
+
+def funcion_a(x):
+    return np.sqrt(x) + 1
+
+def funcion_b(x, y):
+    return x ** 2 + y ** 2
+
+def funcion_c(data):
+    total = 0.0
+    for val in data:
+        total += val
+    return total
+
+# ⚠️ LLAMAR AL FINAL del módulo
+# Todas las funciones ARRIBA serán jitteadas
+# Las de ABAJO no
+jit_module(nopython=True, error_model="numpy")
+
+# Esta NO será jitteada (definida después de jit_module)
+def funcion_no_jit(x):
+    return str(x)`,
+          options: [
+            { code: 'nopython=True', desc: 'Pasa cualquier kwarg que le darías a @jit. Todas las funciones recibirán esas opciones.' },
+            { code: 'Posición importa', desc: 'Solo jittea funciones definidas ANTES de la llamada a jit_module() y DENTRO del mismo módulo (no importadas).' }
+          ],
+          pitfall: `<strong>Experimental:</strong> La API puede cambiar entre versiones de Numba.<br><br><strong>No es selectivo:</strong> Jittea TODAS las funciones. Si alguna no es compatible con nopython mode, fallará. Considera decorar manualmente las funciones incompatibles con <code>@jit(forceobj=True)</code> antes de llamar a jit_module().`,
+          diagnostic: ``
+        },
+
+        // ── objmode ──
+        result_objmode: {
+          type: 'result',
+          decorator: 'with objmode()',
+          decoratorClass: 'objmode',
+          title: 'objmode() — Código Python dentro de @njit',
+          why: `<strong>objmode()</strong> es un context manager que te permite ejecutar código Python normal (con el intérprete) dentro de una función @njit. Es un "escape hatch" para cuando necesitas llamar una función incompatible con Numba sin salir de la función compilada. <strong>Úsalo con cautela</strong> — el código dentro de objmode NO es rápido (corre en el intérprete).`,
+          code: `from numba import njit, objmode
+import numpy as np
+
+@njit(cache=True)
+def pipeline_hibrido(data):
+    # Parte rápida: código compilado
+    n = len(data)
+    procesado = np.empty(n)
+    for i in range(n):
+        procesado[i] = np.sqrt(data[i]) * 2.0
+
+    # Necesito llamar algo incompatible con Numba
+    with objmode(resultado='float64[:]'):
+        # Este bloque corre en el intérprete Python
+        # Puedo usar pandas, scipy, lo que sea
+        from scipy.signal import medfilt
+        resultado = medfilt(procesado, kernel_size=5).astype(np.float64)
+
+    # De vuelta en código compilado
+    total = 0.0
+    for i in range(len(resultado)):
+        total += resultado[i]
+
+    return total`,
+          options: [
+            { code: 'Anotar tipos de salida', desc: 'DEBES declarar el tipo de las variables que salen del bloque objmode: objmode(var1="float64[:]", var2="int64")' },
+            { code: 'Rendimiento', desc: 'El bloque objmode tiene overhead significativo (adquirir GIL, boxing/unboxing). Minimiza su uso. Idealmente, haz TODO el trabajo pesado en nopython y solo usa objmode para operaciones puntuales incompatibles.' }
+          ],
+          pitfall: `<strong>⚠️ Advertencia oficial:</strong> "This feature can be easily mis-used." Úsalo SOLO cuando no hay alternativa. Primero intenta: (1) reescribir la lógica en Numba puro, (2) usar @overload, (3) separar en funciones distintas.<br><br><strong>Limitaciones:</strong> No puede usar yield, break, return, o raise que salga del with. No puede contener otros with statements. Los estados de random number generator no se sincronizan entre nopython y objmode.`,
+          diagnostic: ``
+        },
+
+        // ── No necesitas Numba ──
+        result_no_numba_needed: {
+          type: 'result',
+          decorator: 'NumPy puro',
+          decoratorClass: 'njit',
+          title: 'Probablemente no necesitas Numba aquí',
+          why: `Si tus operaciones NumPy individuales ya son rápidas y tu cuello de botella no es computación numérica, Numba no te va a ayudar mucho. NumPy ya ejecuta en C internamente. Numba brilla cuando: (1) tienes loops Python que NumPy no puede vectorizar, (2) encadenas muchas operaciones NumPy creando temporales, o (3) necesitas paralelismo a nivel de loop.`,
+          code: `# Si NumPy ya es rápido para tu caso, estas son mejores opciones:
+
+# 1. Profiling primero — ¿dónde está el cuello de botella?
+# python -m cProfile mi_script.py
+
+# 2. Si es I/O → Polars, asyncio, multiprocessing
+# 3. Si es lógica de negocio → refactorizar algoritmo
+# 4. Si es memoria → chunking con np.memmap o Dask
+
+# Solo si después del profiling el cuello de botella es
+# un loop numérico, vuelve a este árbol de decisión.`,
+          options: [],
+          pitfall: `<strong>Profiling primero, siempre:</strong> La optimización prematura es la raíz de todo mal. Usa <code>cProfile</code> o <code>line_profiler</code> para identificar dónde pasa realmente el tiempo tu código.`,
+          diagnostic: ``
+        },
+
+        // ── No Numba para I/O ──
+        result_no_numba_io: {
+          type: 'result',
+          decorator: 'No usar Numba',
+          decoratorClass: 'njit',
+          title: 'Numba no es para I/O',
+          why: `Numba compila código numérico a código máquina. <strong>No puede acelerar I/O</strong> (lectura de archivos, red, bases de datos). Si tu cuello de botella es I/O, las herramientas correctas son otras.`,
+          code: `# Para I/O intensivo, considera:
+
+# Lectura de CSV/Parquet → Polars (más rápido que pandas)
+# import polars as pl
+# df = pl.read_parquet("datos.parquet")
+
+# Procesamiento paralelo de archivos → concurrent.futures
+# from concurrent.futures import ThreadPoolExecutor
+# with ThreadPoolExecutor(max_workers=8) as pool:
+#     results = pool.map(procesar_archivo, lista_archivos)
+
+# Datos que no caben en RAM → Dask
+# import dask.dataframe as dd
+# df = dd.read_parquet("datos_enormes/")
+
+# Base de datos → conexiones pooled + queries optimizados`,
+          options: [],
+          pitfall: `<strong>Patrón común:</strong> Muchos pipelines son I/O-bound en la carga y CPU-bound en el procesamiento. Usa Polars/Dask para cargar, luego Numba para procesar los arrays numéricos resultantes.`,
+          diagnostic: ``
+        }
+      };
+
+      // ══════════════════════════════════════════════
+      // ██ MOTOR DE RENDERIZADO DEL ÁRBOL ██
+      // ══════════════════════════════════════════════
+
+      let dtState = {
+        history: [],     // [{nodeId, optionId, optionLabel}]
+        currentNode: 'root'
+      };
+
+      function dtRender() {
+        const node = TREE[dtState.currentNode];
+        if (!node) return;
+
+        // Handle redirects
+        if (node.type === 'result' && node.redirect) {
+          dtState.currentNode = node.redirect;
+          dtRender();
+          return;
+        }
+
+        renderBreadcrumb();
+        renderHistory();
+        renderCurrent(node);
+      }
+
+      function renderBreadcrumb() {
+        const el = document.getElementById('dt-breadcrumb');
+        if (dtState.history.length === 0) {
+          el.innerHTML = '';
+          return;
+        }
+        let html = '';
+        dtState.history.forEach((h, idx) => {
+          if (idx > 0) html += '<span class="dt-crumb-sep">→</span>';
+          html += `<span class="dt-crumb" onclick="dtGoBack(${idx})" title="Volver aquí">${h.optionLabel}</span>`;
+        });
+        el.innerHTML = html;
+      }
+
+      function renderHistory() {
+        const el = document.getElementById('dt-history');
+        let html = '';
+        dtState.history.forEach((h, idx) => {
+          const node = TREE[h.nodeId];
+          if (node && node.type === 'question') {
+            html += `<div class="dt-answered" onclick="dtGoBack(${idx})">
+              <span class="dt-step-badge q">${idx + 1}</span>
+              <span class="dt-answered-q">${truncate(node.text, 50)}</span>
+              <span style="color:var(--border)">→</span>
+              <span class="dt-answered-a">${h.optionLabel}</span>
+            </div>`;
+          }
+        });
+        el.innerHTML = html;
+      }
+
+      function renderCurrent(node) {
+        const el = document.getElementById('dt-current');
+        if (node.type === 'question') {
+          el.innerHTML = renderQuestion(node);
+        } else if (node.type === 'result') {
+          el.innerHTML = renderResult(node);
+        }
+      }
+
+      function renderQuestion(node) {
+        const stepNum = dtState.history.length + 1;
+        let optionsHtml = '';
+        node.options.forEach(opt => {
+          optionsHtml += `
+            <button class="dt-option" onclick="dtChoose('${opt.id}', '${escHtml(opt.label)}')">
+              <span class="dt-option-icon">${opt.icon}</span>
+              <span class="dt-option-content">
+                <span class="dt-option-label">${opt.label}</span>
+                <span class="dt-option-desc">${opt.desc}</span>
+              </span>
+            </button>`;
+        });
+
+        let contextHtml = '';
+        if (node.context) {
+          contextHtml = `<div class="dt-context">${node.context}</div>`;
+        }
+
+        return `
+          <div class="dt-card">
+            <div class="dt-card-header">
+              <span class="dt-step-badge q">${stepNum}</span>
+              <span class="dt-question-text">${node.text}</span>
+            </div>
+            <div class="dt-card-body">
+              ${contextHtml}
+              <div class="dt-options">${optionsHtml}</div>
+            </div>
+          </div>`;
+      }
+
+      function renderResult(node) {
+        let optionsHtml = '';
+        if (node.options && node.options.length > 0) {
+          let rows = '';
+          node.options.forEach(opt => {
+            rows += `<div class="dt-result-option-row">▸ <code>${opt.code}</code> — ${opt.desc}</div>`;
+          });
+          optionsHtml = `
+            <div class="dt-result-options">
+              <div class="dt-result-options-title">⚡ Opciones de rendimiento</div>
+              ${rows}
+            </div>`;
+        }
+
+        let pitfallHtml = '';
+        if (node.pitfall) {
+          pitfallHtml = `
+            <div class="dt-pitfall">
+              <div class="dt-pitfall-title">⚠️ Trampas y advertencias</div>
+              ${node.pitfall}
+            </div>`;
+        }
+
+        let diagnosticHtml = '';
+        if (node.diagnostic) {
+          diagnosticHtml = `
+            <div class="dt-diagnostic">
+              <div class="dt-diagnostic-title">🔍 Cómo verificar que funciona</div>
+              ${node.diagnostic}
+            </div>`;
+        }
+
+        return `
+          <div class="dt-result">
+            <div class="dt-result-header">
+              <span class="dt-step-badge r">✓</span>
+              <span class="dt-result-title">${node.title}</span>
+            </div>
+            <div class="dt-result-body">
+              <span class="dt-result-decorator ${node.decoratorClass}">${node.decorator}</span>
+              <div class="dt-result-why">${node.why}</div>
+              <div class="dt-result-code">${node.code}</div>
+              ${optionsHtml}
+              ${pitfallHtml}
+              ${diagnosticHtml}
+              <div class="dt-actions">
+                <button class="dt-btn primary" onclick="dtReset()">🔄 Empezar de nuevo</button>
+                <button class="dt-btn" onclick="dtCopyCode('${escAttr(node.code || '')}')">📋 Copiar código</button>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      // ══════════════════════════════════════════════
+      // ██ FUNCIONES DE NAVEGACIÓN Y CONTROL ██
+      // ══════════════════════════════════════════════
+
+      function dtChoose(optionId, optionLabel) {
+        // Guardar la elección en el historial
+        dtState.history.push({
+          nodeId: dtState.currentNode,
+          optionId: optionId,
+          optionLabel: optionLabel
+        });
+
+        // Avanzar al siguiente nodo
+        dtState.currentNode = optionId;
+
+        // Renderizar
+        dtRender();
+
+        // Scroll suave al contenido actual
+        setTimeout(() => {
+          const el = document.getElementById('dt-current');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 50);
+      }
+
+      function dtGoBack(stepIndex) {
+        // Volver a un punto anterior del historial
+        const target = dtState.history[stepIndex];
+        dtState.currentNode = target.nodeId;
+        dtState.history = dtState.history.slice(0, stepIndex);
+        dtRender();
+      }
+
+      function dtReset() {
+        dtState = { history: [], currentNode: 'root' };
+        dtRender();
+        // Scroll al inicio del árbol
+        setTimeout(() => {
+          const el = document.getElementById('dt-breadcrumb');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 50);
+      }
+
+      function dtJumpTo(resultId) {
+        // Acceso directo a un resultado específico
+        // Limpia el historial y muestra directamente el resultado
+        dtState = {
+          history: [{ nodeId: 'root', optionId: resultId, optionLabel: 'Acceso directo' }],
+          currentNode: resultId
+        };
+        dtRender();
+        setTimeout(() => {
+          const el = document.getElementById('dt-current');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 50);
+      }
+
+      function dtCopyCode(code) {
+        // Decodificar entidades HTML y copiar al portapapeles
+        const textarea = document.createElement('textarea');
+        textarea.value = code.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          // Feedback visual breve
+          const btns = document.querySelectorAll('.dt-btn');
+          btns.forEach(btn => {
+            if (btn.textContent.includes('Copiar')) {
+              const original = btn.innerHTML;
+              btn.innerHTML = '✅ ¡Copiado!';
+              btn.style.borderColor = 'var(--accent2)';
+              btn.style.color = 'var(--accent2)';
+              setTimeout(() => {
+                btn.innerHTML = original;
+                btn.style.borderColor = '';
+                btn.style.color = '';
+              }, 1500);
+            }
+          });
+        } catch (e) {
+          // Fallback: intentar con API moderna
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(textarea.value);
+          }
+        }
+        document.body.removeChild(textarea);
+      }
+
+      // ══════════════════════════════════════════════
+      // ██ UTILIDADES ██
+      // ══════════════════════════════════════════════
+
+      function escHtml(str) {
+        if (!str) return '';
+        return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      }
+
+      function escAttr(str) {
+        if (!str) return '';
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/'/g, '&#39;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '\\n')
+          .replace(/`/g, '\\`');
+      }
+
+      function truncate(str, maxLen) {
+        if (!str) return '';
+        if (str.length <= maxLen) return str;
+        return str.substring(0, maxLen) + '...';
+      }
+
+      // ══════════════════════════════════════════════
+      // ██ INICIALIZACIÓN ██
+      // ══════════════════════════════════════════════
+
+      // Renderizar el estado inicial cuando el DOM esté listo
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', dtRender);
+      } else {
+        dtRender();
+      }
+
+      // Exponer funciones al scope global para los onclick
+      window.dtChoose = dtChoose;
+      window.dtGoBack = dtGoBack;
+      window.dtReset = dtReset;
+      window.dtJumpTo = dtJumpTo;
+      window.dtCopyCode = dtCopyCode;
+
+    })(); // Fin del IIFE
+    </script>
+
+    <!-- ============================================ -->
+    <!-- === MAPA ESTÁTICO DE REFERENCIA RÁPIDA ===== -->
+    <!-- ============================================ -->
+    <div class="dt-quickref" style="margin-top:2.5rem; border-top:1px solid var(--border); padding-top:1.5rem;">
+      <h3>📋 Mapa estático completo (para referencia sin interactividad)</h3>
+      <p style="color:var(--muted); font-size:0.9rem; margin-bottom:1rem;">Si prefieres ver todo de un vistazo sin navegar el árbol interactivo:</p>
+
+<pre><code><span class="cm">¿Qué tipo de problema tienes?</span>
+│
+├─ <span class="kw">LOOP NUMÉRICO LENTO</span>
+│  ├─ ¿Iteraciones independientes?
+│  │  ├─ SÍ + &gt;10K iteraciones
+│  │  │  ├─ Precisión IEEE no crítica → <span class="dec">@njit(parallel=True, fastmath=True)</span> + prange
+│  │  │  └─ Precisión IEEE crítica    → <span class="dec">@njit(parallel=True)</span> + prange
+│  │  ├─ SÍ + &lt;10K iteraciones       → <span class="dec">@njit</span> (paralelo no vale la pena)
+│  │  └─ NO (dependencia secuencial)
+│  │     ├─ Llamada &gt;1K veces desde Python → <span class="dec">@njit</span> con batch (loop DENTRO)
+│  │     └─ Pocas llamadas
+│  │        ├─ Script repetitivo → <span class="dec">@njit(cache=True)</span>
+│  │        └─ Desarrollo activo → <span class="dec">@njit</span>
+│  └─ Loop externo independiente + interno dependiente
+│     └─ <span class="dec">@njit(parallel=True)</span>: prange externo + range interno
+│
+├─ <span class="kw">OPERACIÓN ESCALAR → ARRAY</span>
+│  ├─ ¿Función puramente escalar→escalar?
+│  │  ├─ SÍ + necesita broadcasting/.reduce()/.accumulate()
+│  │  │  ├─ Array &gt;1M elementos → <span class="dec">@vectorize(target='parallel')</span>
+│  │  │  └─ Array normal         → <span class="dec">@vectorize</span>
+│  │  ├─ SÍ + solo array 1D
+│  │  │  ├─ Es para librería/API → <span class="dec">@vectorize</span> (interfaz NumPy estándar)
+│  │  │  └─ Es código interno    → <span class="dec">@njit</span> con loop manual (más simple)
+│  │  └─ NO (necesita ver varios elementos) → Ir a "Sub-array ops"
+│  │
+├─ <span class="kw">OPERACIÓN SOBRE SUB-ARRAYS</span> (filas, ventanas, secciones)
+│  ├─ ¿Necesita broadcasting automático?
+│  │  ├─ SÍ + millones de llamadas con sub-arrays pequeños
+│  │  │  └─ <span class="dec">@njit</span> loop manual + output pre-allocado (evita overhead ufunc)
+│  │  ├─ SÍ + pocas llamadas o sub-arrays grandes
+│  │  │  └─ <span class="dec">@guvectorize</span> con firma dimensional: "(n)->()"
+│  │  └─ NO (itero filas con loop)
+│  │     ├─ Filas independientes → <span class="dec">@njit(parallel=True)</span> + prange
+│  │     └─ Filas dependientes   → <span class="dec">@njit</span>
+│  │
+├─ <span class="kw">CADA RESULTADO DEPENDE DE VECINOS</span> (grilla/imagen)
+│  ├─ Patrón de vecindario fijo
+│  │  ├─ Quiero paralelismo → <span class="dec">@stencil</span> llamado desde <span class="dec">@njit(parallel=True)</span>
+│  │  └─ Serial está bien   → <span class="dec">@stencil</span>
+│  └─ Patrón variable       → <span class="dec">@njit</span> con loop manual
+│
+├─ <span class="kw">OBJETO CON ESTADO MUTABLE</span>
+│  ├─ ¿Se usa dentro de @njit?
+│  │  ├─ SÍ → <span class="dec">@jitclass</span>
+│  │  └─ NO + métodos pesados → <span class="dec">@jitclass</span>
+│  │  └─ NO + métodos ligeros → Clase Python normal + <span class="dec">@njit</span> para lo pesado
+│  └─ ¿Solo proceso datos sin estado residual?
+│     └─ <span class="dec">@njit</span> con funciones puras (pasar estado como argumentos)
+│
+├─ <span class="kw">INTEROPERABILIDAD</span>
+│  ├─ Callback para SciPy/C     → <span class="dec">@cfunc</span>("float64(float64)")
+│  ├─ Función externa en @njit   → <span class="dec">@overload</span>(mi_funcion)
+│  ├─ Jittear módulo entero      → <span class="fn">jit_module</span>(nopython=True) al final del módulo
+│  └─ Código Python dentro @njit → <span class="kw">with</span> <span class="fn">objmode</span>(var='tipo') <span class="cm"># ⚠️ escape hatch, no es rápido</span>
+│
+└─ <span class="kw">OPTIMIZACIONES TRANSVERSALES</span> (aplican a cualquier decorador)
+   ├─ <span class="dec">cache=True</span>      → Evitar recompilación al reiniciar script
+   ├─ <span class="dec">fastmath=True</span>   → ~2x más rápido, error ~4 ULP (no finanzas)
+   ├─ <span class="dec">nogil=True</span>      → Liberar GIL para threading.Thread manual
+   ├─ <span class="fn">Intel SVML</span>      → conda install intel-cmplr-lib-rt (~2-4x en sin/cos/exp)
+   ├─ <span class="fn">Warm-up</span>         → Primera llamada con datos dummy para pre-compilar
+   ├─ <span class="fn">Batch</span>           → Mover loops Python DENTRO de @njit (&gt;1K llamadas)
+   ├─ <span class="fn">Pre-allocar</span>     → Pasar output como argumento, reutilizar buffers
+   ├─ <span class="fn">float32</span>         → Mitad de memoria, doble SIMD, doble throughput RAM
+   ├─ <span class="fn">C-order</span>         → Acceder última dimensión en loop interno (contiguo)
+   └─ <span class="fn">Verificar</span>       → inspect_types(), parallel_diagnostics(4), inspect_llvm()</code></pre>
+
+      <div class="warn">
+        <strong>Meta-principio:</strong> Empieza con <code>@njit</code>. Solo cambia de decorador cuando necesites una capacidad específica que <code>@njit</code> no ofrece. Optimiza <strong>memoria antes que CPU</strong>, porque la CPU casi nunca es el bottleneck real. Y <strong>mide siempre</strong> — sin benchmarks con tus datos reales, estás adivinando.
+      </div>
+
+      <div class="tip">
+        <strong>¿Cuándo Numba NO es suficiente?</strong> Este árbol cubre Numba como herramienta. Si después de optimizar con Numba necesitas más rendimiento: (1) <strong>GPU</strong> → CuPy o numba.cuda, (2) <strong>Multi-nodo</strong> → Ray/Dask, (3) <strong>I/O bound</strong> → Polars/asyncio. Eso ya no es un árbol de Numba, es <em>arquitectura de sistemas numéricos</em> — un tema diferente.
+      </div>
+    </div>
+
+  </div><!-- fin .module-body -->
+</div><!-- fin #m11 -->
+
 
 </div>
 
